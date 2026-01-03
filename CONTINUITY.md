@@ -11,6 +11,9 @@
     - `MINIMAX_CP_KEY` is required and never logged (even with `--debug`).
     - Spinner + SIGINT/SIGTERM handling exits with 130.
     - `--create` shows progress logs + spinner during push/PR creation (no silent wait).
+  - Refactor goal:
+    - Replace custom `gh` subprocess wrapper with `github.com/cli/go-gh/v2` for cleaner `gh` execution + errors.
+    - Use `go-gh` repository resolution + REST client to detect repo default branch (keep git fallback).
 
 - Constraints/Assumptions:
   - Follow `AGENTS.md`: read/update `CONTINUITY.md` at the start of every assistant turn; update it immediately after every file edit.
@@ -32,6 +35,13 @@
   - `main.go` updated to push current branch (set upstream if missing) before running `gh pr create`, so PR creation can work non-interactively when the branch wasn't pushed yet.
   - `main.go` updated to show stderr progress logs + spinner while pushing and while running `gh pr create` (previously silent until the end).
   - Spinner messages adjusted so the spinner line itself starts with the spinner and includes the full action text (no separate preceding "Pushing..." / "Creating..." log line).
+  - Plan accepted:
+    - Keep PR creation via `gh pr create`, but execute via `go-gh` (`gh.ExecContext`) instead of custom `exec.Command`.
+    - Default base branch detection will move from `gh repo view` to `go-gh/pkg/repository` + `go-gh/pkg/api` REST (`GET repos/{owner}/{repo}` → `default_branch`), with existing `origin/HEAD` fallback.
+  - In progress:
+    - `main.go`: introduced `execGh(ctx, ...)` backed by `go-gh` and removed the previous `runGh` wrapper; remaining call sites still need to be migrated.
+    - `main.go`: default base branch detection is being refactored to use `go-gh` repo resolution + REST `default_branch` lookup (git `origin/HEAD` remains as fallback).
+    - `main.go`: PR creation now executes `gh pr create` via `execGh(ctx, ...)` (go-gh) instead of a custom subprocess wrapper.
   - Reported issue (from another repo execution): `gh pr create` failed with GraphQL errors like `Head sha can't be blank`, `Base sha can't be blank`, `No commits between main and <branch>`, likely due to passing `--head <branch>` (branch not pushed / not resolvable remotely) and/or using default base `main` when repo default branch differs.
 
 - Done:
@@ -53,10 +63,10 @@
   - Updated PR creation flow to auto-push the current branch (and set upstream if needed) before calling `gh pr create`.
 
 - Now:
-  - Improve `--create` UX: show progress logs + spinner during push and PR creation. (Implemented in `main.go`; needs verification)
+  - Verify `go-gh` refactor compiles and behaves as expected.
 
 - Next:
-  - Verify build and behavior with `--help` and (if possible) a dry run PR creation invocation. (Use workspace `GOCACHE`/`GOTMPDIR` if needed)
+  - Consider further cleanup: remove unused `runCmd` for `gh` execution if no longer needed beyond git wrappers/editor (optional).
 
 - Open questions (UNCONFIRMED if needed):
   - Whether the failing target repo's default branch is `master` (vs `main`) and whether the head branch existed only locally (not pushed).

@@ -19,6 +19,10 @@ import (
 	"syscall"
 	"time"
 	"unicode/utf8"
+
+	gh "github.com/cli/go-gh/v2"
+	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/cli/go-gh/v2/pkg/repository"
 )
 
 const (
@@ -823,36 +827,65 @@ func confirm(in io.Reader, errOut io.Writer, prompt string) bool {
 	return resp == "y" || resp == "yes"
 }
 
-func runGh(ctx context.Context, args ...string) (string, error) {
-	stdout, stderr, err := runCmd(ctx, "gh", args, nil)
+func execGh(ctx context.Context, args ...string) (string, error) {
+	stdout, stderr, err := gh.ExecContext(ctx, args...)
 	if err != nil {
-		if strings.TrimSpace(stderr) == "" {
+		if strings.TrimSpace(stderr.String()) == "" {
 			return "", fmt.Errorf("gh %s failed: %w", strings.Join(args, " "), err)
 		}
-		return "", fmt.Errorf("gh %s failed: %s", strings.Join(args, " "), strings.TrimSpace(stderr))
+		return "", fmt.Errorf("gh %s failed: %s", strings.Join(args, " "), strings.TrimSpace(stderr.String()))
 	}
-	return strings.TrimRight(stdout, "\n"), nil
+	return strings.TrimRight(stdout.String(), "\n"), nil
 }
 
 func detectDefaultBaseBranch(ctx context.Context, env Env) (string, error) {
-	// Prefer GitHub's notion of the repo default branch.
-	args := []string{"repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"}
-	if strings.TrimSpace(env.GHRepo) != "" {
-		args = append(args, "--repo", strings.TrimSpace(env.GHRepo))
+	// Prefer GitHub's notion of the repo default branch via the REST API.
+	// This avoids guessing between main/master and matches what gh itself uses.
+	var apiErr error
+	repoStr := strings.TrimSpace(env.GHRepo)
+
+	var repo repository.Repository
+	var err error
+	if repoStr != "" {
+		repo, err = repository.Parse(repoStr)
+	} else {
+		repo, err = repository.Current()
 	}
-	if out, err := runGh(ctx, args...); err == nil {
-		if s := strings.TrimSpace(out); s != "" {
-			return s, nil
+	if err == nil {
+		client, err := api.DefaultRESTClient()
+		if err == nil {
+			var resp struct {
+				DefaultBranch string `json:"default_branch"`
+			}
+			path := fmt.Sprintf("repos/%s/%s", repo.Owner, repo.Name)
+			if err := client.Get(path, &resp); err == nil {
+				if s := strings.TrimSpace(resp.DefaultBranch); s != "" {
+					return s, nil
+				}
+				apiErr = fmt.Errorf("default_branch is empty")
+			} else {
+				apiErr = err
+			}
+		} else {
+			apiErr = err
 		}
+	} else {
+		apiErr = err
 	}
 
 	// Fallback to git's remote HEAD symbolic ref if available.
 	ref, err := runGit(ctx, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err != nil {
+		if apiErr != nil {
+			return "", fmt.Errorf("failed to detect default branch via API: %w; fallback failed: %w", apiErr, err)
+		}
 		return "", err
 	}
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
+		if apiErr != nil {
+			return "", fmt.Errorf("failed to detect default branch via API: %w; fallback failed: origin/HEAD is empty", apiErr)
+		}
 		return "", fmt.Errorf("origin/HEAD is empty")
 	}
 	parts := strings.Split(ref, "/")
@@ -887,7 +920,7 @@ func createPullRequest(ctx context.Context, env Env, title, body, head, base str
 	if spinner != nil {
 		spinner.Start(fmt.Sprintf(" Creating pull request (%s → %s)...", head, base), errOut)
 	}
-	output, err := runGh(ctx, args...)
+	output, err := execGh(ctx, args...)
 	if spinner != nil {
 		spinner.Stop()
 	}
