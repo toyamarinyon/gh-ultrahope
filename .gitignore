@@ -1,2 +1,4 @@
 /gh-pr-suggest
 /gh-pr-suggest.exe
+.gocache
+.gomodcache
