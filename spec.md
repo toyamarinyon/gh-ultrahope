@@ -33,9 +33,10 @@ gh-pr-suggest main --create
 
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `MINIMAX_CP_KEY` | Yes | API key for the LLM service | - |
-| `MINIMAX_ENDPOINT` | No | API endpoint URL | `https://api.minimax.io/anthropic/v1/messages` |
-| `MINIMAX_MODEL` | No | LLM model name | `MiniMax-M2.1` |
+| `GH_PR_SUGGEST_LLM_PROVIDER` | No | LLM API type: `minimax_anthropic` (default), `anthropic`, `anthropic_compat`, `openai_compat` | `minimax_anthropic` |
+| `GH_PR_SUGGEST_LLM_API_KEY` | Yes | API key for the selected provider | - |
+| `GH_PR_SUGGEST_LLM_ENDPOINT` | No | API endpoint URL override | provider default |
+| `GH_PR_SUGGEST_LLM_MODEL` | No | Model name override | provider default |
 | `EDITOR` | No* | Editor to use for editing (--edit mode) | `vim` |
 | `VISUAL` | No* | Alternative editor (fallback) | `vim` |
 | `GH_REPO` | No* | Repository in `owner/repo` format (auto-detected by `gh`) | auto-detected |
@@ -70,7 +71,11 @@ Pattern: `^(\w+)\s*\(([^)]+)\):` or `^(\w+):\s+(.+)`
 
 ### 3. LLM API Integration
 
-#### Request Format
+The tool supports **two API shapes**, selected by `GH_PR_SUGGEST_LLM_PROVIDER`:
+- **Anthropic Messages compatible** (`minimax_anthropic`, `anthropic`, `anthropic_compat`)
+- **OpenAI Chat Completions compatible** (`openai_compat`)
+
+#### Request Format (Anthropic Messages compatible)
 
 ```json
 {
@@ -85,12 +90,34 @@ Pattern: `^(\w+)\s*\(([^)]+)\):` or `^(\w+):\s+(.+)`
 }
 ```
 
-#### Request Headers
+#### Request Headers (Anthropic Messages compatible)
 
 ```
 Content-Type: application/json
-x-api-key: <MINIMAX_CP_KEY>
+x-api-key: <API_KEY>
 anthropic-version: 2023-06-01
+```
+
+#### Request Format (OpenAI Chat Completions compatible)
+
+```json
+{
+  "model": "gpt-4o-mini",
+  "max_tokens": 2048,
+  "messages": [
+    {
+      "role": "user",
+      "content": "<constructed prompt>"
+    }
+  ]
+}
+```
+
+#### Request Headers (OpenAI Chat Completions compatible)
+
+```
+Content-Type: application/json
+Authorization: Bearer <API_KEY>
 ```
 
 #### Prompt Structure
@@ -182,7 +209,6 @@ When `--create` flag is used:
 3. `gh pr create` is called with:
    - `--title <title>`
    - `--body-file <tmp-path>`
-   - `--head <current-branch>`
    - `--base <base-branch>`
    - `--repo <GH_REPO>` (if set)
 4. PR URL is extracted from output and displayed
@@ -209,7 +235,7 @@ Deno.addSignalListener("SIGTERM", handler);
 
 | Error Type | Handling |
 |------------|----------|
-| Missing API key | `Missing MINIMAX_CP_KEY env var.` → exit(1) |
+| Missing API key | Provider-specific message → exit(1) |
 | API error | Print error message → exit(1) |
 | Unknown argument | `Unknown argument: <arg>` → exit(2) |
 | No merge base | Error message → exit(1) |

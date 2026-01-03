@@ -40,15 +40,61 @@ gh pr-suggest main --create
 
 ### Base branch default behavior
 
-If you omit `base-branch`, the tool will **auto-detect the repository’s default branch** via `gh repo view` (fallback: `origin/HEAD`). If detection fails, it falls back to `main`.
+If you omit `base-branch`, the tool will **auto-detect the repository’s default branch** via the GitHub REST API (fallback: `origin/HEAD`). If detection fails, it falls back to `main`.
 
 ### Environment variables
 
-- `MINIMAX_CP_KEY` (required): API key (**never printed**)
-- `MINIMAX_ENDPOINT` (optional): default `https://api.minimax.io/anthropic/v1/messages`
-- `MINIMAX_MODEL` (optional): default `MiniMax-M2.1`
+- `GH_PR_SUGGEST_LLM_PROVIDER` (optional): LLM API type (default: `minimax_anthropic`)
+  - `minimax_anthropic`: Anthropic Messages compatible (MiniMax endpoint by default)
+  - `anthropic`: Anthropic Messages compatible (Claude)
+  - `anthropic_compat`: Anthropic Messages compatible (custom endpoint)
+  - `openai_compat`: OpenAI Chat Completions compatible (custom endpoint)
+- `GH_PR_SUGGEST_LLM_API_KEY` (required): API key (**never printed**)
+- `GH_PR_SUGGEST_LLM_ENDPOINT` (optional): API endpoint override
+- `GH_PR_SUGGEST_LLM_MODEL` (optional): model override
 - `EDITOR` / `VISUAL` (optional): editor used for `--edit` (default: `vim`)
 - `GH_REPO` (optional): `owner/repo` (if set, passed to `gh pr create --repo`)
+
+### Examples
+
+#### Default (MiniMax Anthropic-compatible)
+
+```bash
+export GH_PR_SUGGEST_LLM_API_KEY="..."
+gh pr-suggest --debug
+```
+
+#### Claude (Anthropic Messages API)
+
+```bash
+export GH_PR_SUGGEST_LLM_PROVIDER="anthropic"
+export GH_PR_SUGGEST_LLM_API_KEY="$ANTHROPIC_API_KEY"
+export GH_PR_SUGGEST_LLM_MODEL="claude-sonnet-4-5"
+# optional:
+# export GH_PR_SUGGEST_LLM_ENDPOINT="https://api.anthropic.com/v1/messages"
+gh pr-suggest
+```
+
+#### Claude-compatible (Anthropic Messages compatible)
+
+```bash
+export GH_PR_SUGGEST_LLM_PROVIDER="anthropic_compat"
+export GH_PR_SUGGEST_LLM_API_KEY="..."
+export GH_PR_SUGGEST_LLM_ENDPOINT="https://your-llm.example/v1/messages"
+export GH_PR_SUGGEST_LLM_MODEL="..."
+gh pr-suggest
+```
+
+#### OpenAI-compatible (Chat Completions)
+
+```bash
+export GH_PR_SUGGEST_LLM_PROVIDER="openai_compat"
+export GH_PR_SUGGEST_LLM_API_KEY="..."
+# optional:
+# export GH_PR_SUGGEST_LLM_ENDPOINT="https://api.openai.com/v1/chat/completions"
+export GH_PR_SUGGEST_LLM_MODEL="gpt-4o-mini"
+gh pr-suggest
+```
 
 ## Make it feel like `gh pr suggest ...`
 

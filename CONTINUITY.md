@@ -8,9 +8,12 @@
   - Success (feature):
     - `gh pr-suggest [base-branch] [--edit|--create|--debug|--help]` works per `spec.md`.
     - Document alias so users can run `gh pr suggest ...` via `gh alias set "pr suggest" "pr-suggest"`.
-    - `MINIMAX_CP_KEY` is required and never logged (even with `--debug`).
+    - LLM API key env var is required and never logged (even with `--debug`).
     - Spinner + SIGINT/SIGTERM handling exits with 130.
     - `--create` shows progress logs + spinner during push/PR creation (no silent wait).
+  - LLM provider goal:
+    - Support Anthropic Messages API compatibility and OpenAI Chat Completions compatibility.
+    - Provider selection via env var `GH_PR_SUGGEST_LLM_PROVIDER` (no CLI flags).
   - Refactor goal:
     - Replace custom `gh` subprocess wrapper with `github.com/cli/go-gh/v2` for cleaner `gh` execution + errors.
     - Use `go-gh` repository resolution + REST client to detect repo default branch (keep git fallback).
@@ -24,6 +27,7 @@
 - Key decisions:
   - Create `CONTINUITY.md` to satisfy `AGENTS.md` and use it as the single canonical session briefing designed to survive context compaction.
   - `gh pr suggest` cannot be implemented as a true nested subcommand via extensions; provide an alias-based UX instead.
+  - LLM provider selection will use env var namespace prefixed with `GH_PR_SUGGEST_LLM_*` (avoid global `LLM_PROVIDER`).
 
 - State:
   - Repo: `/Users/satoshi/repo/toyamarinyon/gh-pr-suggest` (git repo).
@@ -42,6 +46,7 @@
     - `main.go`: introduced `execGh(ctx, ...)` backed by `go-gh` and removed the previous `runGh` wrapper; remaining call sites still need to be migrated.
     - `main.go`: default base branch detection is being refactored to use `go-gh` repo resolution + REST `default_branch` lookup (git `origin/HEAD` remains as fallback).
     - `main.go`: PR creation now executes `gh pr create` via `execGh(ctx, ...)` (go-gh) instead of a custom subprocess wrapper.
+    - (none)
   - Reported issue (from another repo execution): `gh pr create` failed with GraphQL errors like `Head sha can't be blank`, `Base sha can't be blank`, `No commits between main and <branch>`, likely due to passing `--head <branch>` (branch not pushed / not resolvable remotely) and/or using default base `main` when repo default branch differs.
 
 - Done:
@@ -61,12 +66,18 @@
   - Implemented base-branch auto-detection (GitHub default branch, fallback to `origin/HEAD`) and removed forced `--head` from `gh pr create` to avoid GraphQL errors when branch is not pushed/remote base differs.
   - Updated `AGENTS.md` with a development flow note: in restricted environments where Go cannot write to default build cache, use repo-local `GOCACHE`/`GOTMPDIR` (`.gocache/`, `.gotmp/`).
   - Updated PR creation flow to auto-push the current branch (and set upstream if needed) before calling `gh pr create`.
+  - Added multi-provider LLM support via env vars (no MINIMAX_* backward compatibility):
+    - `GH_PR_SUGGEST_LLM_PROVIDER` selects `minimax_anthropic` / `anthropic` / `anthropic_compat` / `openai_compat`.
+    - `GH_PR_SUGGEST_LLM_API_KEY` / `GH_PR_SUGGEST_LLM_ENDPOINT` / `GH_PR_SUGGEST_LLM_MODEL` configure providers and overrides.
+  - Updated `README.md` and `spec.md` with provider/env var documentation and examples.
+  - Removed `MINIMAX_*` backward compatibility; LLM credentials are configured via `GH_PR_SUGGEST_LLM_*`.
 
 - Now:
-  - Verify `go-gh` refactor compiles and behaves as expected.
+  - Finalize multi-provider LLM support docs and verify build/help.
 
 - Next:
-  - Consider further cleanup: remove unused `runCmd` for `gh` execution if no longer needed beyond git wrappers/editor (optional).
+  - Update docs (`README.md`, `spec.md`) to describe provider env vars and examples.
+  - Verify `main.go` compiles and basic `--help` still works.
 
 - Open questions (UNCONFIRMED if needed):
   - Whether the failing target repo's default branch is `master` (vs `main`) and whether the head branch existed only locally (not pushed).

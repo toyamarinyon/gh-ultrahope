@@ -26,9 +26,13 @@ import (
 )
 
 const (
-	defaultBaseBranch = "main"
-	defaultEndpoint   = "https://api.minimax.io/anthropic/v1/messages"
-	defaultModel      = "MiniMax-M2.1"
+	defaultBaseBranch        = "main"
+	defaultMinimaxEndpoint   = "https://api.minimax.io/anthropic/v1/messages"
+	defaultMinimaxModel      = "MiniMax-M2.1"
+	defaultAnthropicEndpoint = "https://api.anthropic.com/v1/messages"
+	defaultAnthropicModel    = "claude-sonnet-4-5"
+	defaultOpenAIEndpoint    = "https://api.openai.com/v1/chat/completions"
+	defaultOpenAIModel       = "gpt-4o-mini"
 
 	exitOK          = 0
 	exitRuntimeErr  = 1
@@ -45,7 +49,17 @@ type Config struct {
 	Help       bool
 }
 
+type LLMProvider string
+
+const (
+	providerMinimaxAnthropic LLMProvider = "minimax_anthropic"
+	providerAnthropic        LLMProvider = "anthropic"
+	providerAnthropicCompat  LLMProvider = "anthropic_compat"
+	providerOpenAICompat     LLMProvider = "openai_compat"
+)
+
 type Env struct {
+	Provider LLMProvider
 	APIKey   string
 	Endpoint string
 	Model    string
@@ -70,8 +84,8 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 	}
 
 	env := readEnv()
-	if env.APIKey == "" {
-		fmt.Fprintln(errOut, "Missing MINIMAX_CP_KEY env var.")
+	if err := validateEnv(env); err != nil {
+		fmt.Fprintln(errOut, err.Error())
 		return exitRuntimeErr
 	}
 
@@ -238,23 +252,79 @@ func readEnv() Env {
 		editor = "vim"
 	}
 
-	endpoint := os.Getenv("MINIMAX_ENDPOINT")
-	if endpoint == "" {
-		endpoint = defaultEndpoint
+	// Provider selection and shared overrides (avoid global env var namespace).
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_PROVIDER")))
+	if provider == "" {
+		provider = string(providerMinimaxAnthropic)
 	}
+	commonKey := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_API_KEY"))
+	commonEndpoint := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_ENDPOINT"))
+	commonModel := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_MODEL"))
 
-	model := os.Getenv("MINIMAX_MODEL")
-	if model == "" {
-		model = defaultModel
+	var apiKey, endpoint, model string
+	switch LLMProvider(provider) {
+	case providerMinimaxAnthropic:
+		apiKey = commonKey
+		endpoint = firstNonEmpty(commonEndpoint, defaultMinimaxEndpoint)
+		model = firstNonEmpty(commonModel, defaultMinimaxModel)
+	case providerAnthropic, providerAnthropicCompat:
+		apiKey = commonKey
+		endpoint = firstNonEmpty(commonEndpoint, defaultAnthropicEndpoint)
+		model = firstNonEmpty(commonModel, defaultAnthropicModel)
+	case providerOpenAICompat:
+		apiKey = commonKey
+		endpoint = firstNonEmpty(commonEndpoint, defaultOpenAIEndpoint)
+		model = firstNonEmpty(commonModel, defaultOpenAIModel)
+	default:
+		// Keep raw provider for validation error, but still populate defaults to reduce nil surprises.
+		apiKey = commonKey
+		endpoint = firstNonEmpty(commonEndpoint, defaultMinimaxEndpoint)
+		model = firstNonEmpty(commonModel, defaultMinimaxModel)
 	}
 
 	return Env{
-		APIKey:   os.Getenv("MINIMAX_CP_KEY"),
-		Endpoint: endpoint,
-		Model:    model,
+		Provider: LLMProvider(provider),
+		APIKey:   strings.TrimSpace(apiKey),
+		Endpoint: strings.TrimSpace(endpoint),
+		Model:    strings.TrimSpace(model),
 		Editor:   editor,
 		GHRepo:   os.Getenv("GH_REPO"),
 	}
+}
+
+func validateEnv(env Env) error {
+	switch env.Provider {
+	case providerMinimaxAnthropic:
+		if strings.TrimSpace(env.APIKey) == "" {
+			return fmt.Errorf("Missing GH_PR_SUGGEST_LLM_API_KEY env var (provider=%s).", env.Provider)
+		}
+	case providerAnthropic, providerAnthropicCompat, providerOpenAICompat:
+		if strings.TrimSpace(env.APIKey) == "" {
+			return fmt.Errorf("Missing GH_PR_SUGGEST_LLM_API_KEY env var (provider=%s).", env.Provider)
+		}
+	default:
+		return fmt.Errorf("Invalid GH_PR_SUGGEST_LLM_PROVIDER=%q. Supported: %s, %s, %s, %s.",
+			string(env.Provider),
+			providerMinimaxAnthropic, providerAnthropic, providerAnthropicCompat, providerOpenAICompat,
+		)
+	}
+
+	if strings.TrimSpace(env.Endpoint) == "" {
+		return fmt.Errorf("LLM endpoint is empty (provider=%s). Set GH_PR_SUGGEST_LLM_ENDPOINT.", env.Provider)
+	}
+	if strings.TrimSpace(env.Model) == "" {
+		return fmt.Errorf("LLM model is empty (provider=%s). Set GH_PR_SUGGEST_LLM_MODEL.", env.Provider)
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 // ---- git wrappers ----
@@ -608,8 +678,8 @@ func nonEmptyOr(s, fallback string) string {
 }
 
 type llmRequest struct {
-	Model     string      `json:"model"`
-	MaxTokens int         `json:"max_tokens"`
+	Model     string       `json:"model"`
+	MaxTokens int          `json:"max_tokens"`
 	Messages  []llmMessage `json:"messages"`
 }
 
@@ -629,8 +699,19 @@ type llmResponse struct {
 }
 
 func callLLM(ctx context.Context, env Env, prompt string, debug bool, spinner *Spinner, errOut io.Writer) (string, error) {
+	switch env.Provider {
+	case providerMinimaxAnthropic, providerAnthropic, providerAnthropicCompat:
+		return callAnthropicMessages(ctx, env, prompt, debug, spinner, errOut)
+	case providerOpenAICompat:
+		return callOpenAIChatCompletions(ctx, env, prompt, debug, spinner, errOut)
+	default:
+		return "", fmt.Errorf("unsupported provider: %s", env.Provider)
+	}
+}
+
+func callAnthropicMessages(ctx context.Context, env Env, prompt string, debug bool, spinner *Spinner, errOut io.Writer) (string, error) {
 	if debug {
-		fmt.Fprintf(errOut, "[debug] endpoint=%s model=%s\n", env.Endpoint, env.Model)
+		fmt.Fprintf(errOut, "[debug] provider=%s endpoint=%s model=%s\n", env.Provider, env.Endpoint, env.Model)
 	}
 
 	reqBody := llmRequest{
@@ -718,6 +799,120 @@ func callLLM(ctx context.Context, env Env, prompt string, debug bool, spinner *S
 			}
 			if strings.TrimSpace(text.String()) != "" {
 				return text.String(), nil
+			}
+		}
+	}
+
+	if debug {
+		fmt.Fprintf(errOut, "[debug] response_body=%s\n", safeSnippet(string(bodyBytes), 1200))
+	}
+	return "", fmt.Errorf("API response did not include text content")
+}
+
+type openAIChatRequest struct {
+	Model     string       `json:"model"`
+	MaxTokens int          `json:"max_tokens,omitempty"`
+	Messages  []llmMessage `json:"messages"`
+}
+
+type openAIChatResponse struct {
+	Choices []struct {
+		Message *struct {
+			Content string `json:"content"`
+		} `json:"message"`
+		Text string `json:"text"`
+	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func callOpenAIChatCompletions(ctx context.Context, env Env, prompt string, debug bool, spinner *Spinner, errOut io.Writer) (string, error) {
+	if debug {
+		fmt.Fprintf(errOut, "[debug] provider=%s endpoint=%s model=%s\n", env.Provider, env.Endpoint, env.Model)
+	}
+
+	reqBody := openAIChatRequest{
+		Model:     env.Model,
+		MaxTokens: 2048,
+		Messages: []llmMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, env.Endpoint, bytes.NewReader(b))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+env.APIKey)
+
+	client := &http.Client{}
+	if spinner != nil {
+		spinner.Start(" Calling API...", errOut)
+	}
+	resp, err := client.Do(req)
+	if spinner != nil {
+		spinner.Stop()
+	}
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Prefer message from JSON error if present.
+		var parsed openAIChatResponse
+		if err := json.Unmarshal(bodyBytes, &parsed); err == nil {
+			if parsed.Error != nil && strings.TrimSpace(parsed.Error.Message) != "" {
+				return "", fmt.Errorf("API error: %s", strings.TrimSpace(parsed.Error.Message))
+			}
+		}
+		msg := safeSnippet(string(bodyBytes), 800)
+		if msg == "" {
+			msg = resp.Status
+		}
+		return "", fmt.Errorf("API error: %s", msg)
+	}
+
+	var parsed openAIChatResponse
+	if err := json.Unmarshal(bodyBytes, &parsed); err == nil {
+		if parsed.Error != nil && strings.TrimSpace(parsed.Error.Message) != "" {
+			return "", fmt.Errorf("API error: %s", strings.TrimSpace(parsed.Error.Message))
+		}
+		for _, c := range parsed.Choices {
+			if c.Message != nil && strings.TrimSpace(c.Message.Content) != "" {
+				return c.Message.Content, nil
+			}
+			if strings.TrimSpace(c.Text) != "" {
+				return c.Text, nil
+			}
+		}
+	}
+
+	// Fallback for minor schema differences without guessing too much.
+	var anyObj map[string]any
+	if err := json.Unmarshal(bodyBytes, &anyObj); err == nil {
+		if arr, ok := anyObj["choices"].([]any); ok && len(arr) > 0 {
+			if m, ok := arr[0].(map[string]any); ok {
+				if msg, ok := m["message"].(map[string]any); ok {
+					if s, _ := msg["content"].(string); strings.TrimSpace(s) != "" {
+						return s, nil
+					}
+				}
+				if s, _ := m["text"].(string); strings.TrimSpace(s) != "" {
+					return s, nil
+				}
 			}
 		}
 	}
