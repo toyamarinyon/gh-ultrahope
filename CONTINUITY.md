@@ -10,6 +10,7 @@
     - Document alias so users can run `gh pr suggest ...` via `gh alias set "pr suggest" "pr-suggest"`.
     - `MINIMAX_CP_KEY` is required and never logged (even with `--debug`).
     - Spinner + SIGINT/SIGTERM handling exits with 130.
+    - `--create` shows progress logs + spinner during push/PR creation (no silent wait).
 
 - Constraints/Assumptions:
   - Follow `AGENTS.md`: read/update `CONTINUITY.md` at the start of every assistant turn; update it immediately after every file edit.
@@ -29,6 +30,8 @@
   - Purpose of `CONTINUITY.md`: persist intent/constraints/decisions/state across context compaction (so the assistant does not rely on earlier chat text unless reflected here).
   - `main.go` updated to: (1) auto-detect repo default base branch when user does not pass one; (2) create PR without forcing `--head` (let `gh` infer/push as needed).
   - `main.go` updated to push current branch (set upstream if missing) before running `gh pr create`, so PR creation can work non-interactively when the branch wasn't pushed yet.
+  - `main.go` updated to show stderr progress logs + spinner while pushing and while running `gh pr create` (previously silent until the end).
+  - Spinner messages adjusted so the spinner line itself starts with the spinner and includes the full action text (no separate preceding "Pushing..." / "Creating..." log line).
   - Reported issue (from another repo execution): `gh pr create` failed with GraphQL errors like `Head sha can't be blank`, `Base sha can't be blank`, `No commits between main and <branch>`, likely due to passing `--head <branch>` (branch not pushed / not resolvable remotely) and/or using default base `main` when repo default branch differs.
 
 - Done:
@@ -50,10 +53,10 @@
   - Updated PR creation flow to auto-push the current branch (and set upstream if needed) before calling `gh pr create`.
 
 - Now:
-  - Fix `--create` robustness: avoid requiring remote head branch; auto-detect base branch when user didn't pass one. (Implemented)
+  - Improve `--create` UX: show progress logs + spinner during push and PR creation. (Implemented in `main.go`; needs verification)
 
 - Next:
-  - Verify build and behavior with `--help` and a dry run PR creation invocation. (Build/help OK when using workspace `GOCACHE`/`GOTMPDIR`)
+  - Verify build and behavior with `--help` and (if possible) a dry run PR creation invocation. (Use workspace `GOCACHE`/`GOTMPDIR` if needed)
 
 - Open questions (UNCONFIRMED if needed):
   - Whether the failing target repo's default branch is `master` (vs `main`) and whether the head branch existed only locally (not pushed).

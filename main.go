@@ -160,7 +160,7 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 			return exitOK
 		}
 
-		if err := createPullRequest(ctx, env, title, body, currentBranch, baseBranch, cfg.Debug, out, errOut); err != nil {
+		if err := createPullRequest(ctx, env, title, body, currentBranch, baseBranch, cfg.Debug, &sp, out, errOut); err != nil {
 			fmt.Fprintln(errOut, err.Error())
 			return exitRuntimeErr
 		}
@@ -343,7 +343,7 @@ func pickPushRemote(ctx context.Context) (string, error) {
 	return remotes[0], nil
 }
 
-func ensureBranchPushed(ctx context.Context, branch string, debug bool, errOut io.Writer) error {
+func ensureBranchPushed(ctx context.Context, branch string, debug bool, spinner *Spinner, errOut io.Writer) error {
 	// If upstream isn't set, push with -u to establish it. If upstream exists and
 	// we're ahead, push to avoid gh pr create failing in non-interactive mode.
 	upstream, err := runGit(ctx, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
@@ -355,7 +355,17 @@ func ensureBranchPushed(ctx context.Context, branch string, debug bool, errOut i
 		if debug {
 			fmt.Fprintf(errOut, "[debug] no upstream for %s; pushing to %s with -u\n", branch, remote)
 		}
+		fmt.Fprintln(errOut, "")
+		if spinner != nil {
+			spinner.Start(fmt.Sprintf(" Pushing branch %s to %s (set upstream)...", branch, remote), errOut)
+		}
 		_, perr := runGit(ctx, "push", "-u", remote, "HEAD")
+		if spinner != nil {
+			spinner.Stop()
+		}
+		if perr == nil {
+			fmt.Fprintln(errOut, "Push completed.")
+		}
 		return perr
 	}
 
@@ -378,9 +388,20 @@ func ensureBranchPushed(ctx context.Context, branch string, debug bool, errOut i
 		if debug {
 			fmt.Fprintf(errOut, "[debug] local branch ahead of %s by %s commits; pushing\n", upstream, ahead)
 		}
+		fmt.Fprintln(errOut, "")
+		if spinner != nil {
+			spinner.Start(fmt.Sprintf(" Pushing branch %s to %s (%s commits ahead)...", branch, upstream, ahead), errOut)
+		}
 		_, perr := runGit(ctx, "push")
+		if spinner != nil {
+			spinner.Stop()
+		}
+		if perr == nil {
+			fmt.Fprintln(errOut, "Push completed.")
+		}
 		return perr
 	}
+	fmt.Fprintf(errOut, "\nBranch is already up-to-date with %s (no push needed).\n", upstream)
 	return nil
 }
 
@@ -838,10 +859,10 @@ func detectDefaultBaseBranch(ctx context.Context, env Env) (string, error) {
 	return parts[len(parts)-1], nil
 }
 
-func createPullRequest(ctx context.Context, env Env, title, body, head, base string, debug bool, out io.Writer, errOut io.Writer) error {
+func createPullRequest(ctx context.Context, env Env, title, body, head, base string, debug bool, spinner *Spinner, out io.Writer, errOut io.Writer) error {
 	// Ensure the current branch is pushed so `gh pr create` can run non-interactively
 	// without prompting where to push.
-	if err := ensureBranchPushed(ctx, head, debug, errOut); err != nil {
+	if err := ensureBranchPushed(ctx, head, debug, spinner, errOut); err != nil {
 		return fmt.Errorf("failed to push current branch: %w", err)
 	}
 
@@ -862,7 +883,14 @@ func createPullRequest(ctx context.Context, env Env, title, body, head, base str
 		args = append(args, "--repo", strings.TrimSpace(env.GHRepo))
 	}
 
+	fmt.Fprintln(errOut, "")
+	if spinner != nil {
+		spinner.Start(fmt.Sprintf(" Creating pull request (%s → %s)...", head, base), errOut)
+	}
 	output, err := runGh(ctx, args...)
+	if spinner != nil {
+		spinner.Stop()
+	}
 	if err != nil {
 		return err
 	}
