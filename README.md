@@ -1,11 +1,13 @@
-# gh-pr-suggest (GitHub CLI extension)
+# gh-ultrahope (GitHub CLI extension)
 
-Suggest a pull request title and body from git commits and diffs using an LLM API.
+AI-powered GitHub workflow assistant.
 
-This repository is a **GitHub CLI extension**. The executable is `gh-pr-suggest` and it is invoked as:
+This repository currently ships the `ultrahope pr suggest` command, which suggests a pull request title and body from git commits and diffs using an LLM API.
+
+This repository is a **GitHub CLI extension**. The executable is `gh-ultrahope` and it is invoked as:
 
 ```bash
-gh pr-suggest ...
+gh ultrahope ...
 ```
 
 ## Install
@@ -13,22 +15,22 @@ gh pr-suggest ...
 ### From GitHub
 
 ```bash
-gh extension install toyamarinyon/gh-pr-suggest
+gh extension install toyamarinyon/gh-ultrahope
 ```
 
 ### From local directory (development)
 
 ```bash
-go build -o gh-pr-suggest .
+go build -o gh-ultrahope .
 gh extension install .
 ```
 
 ## Usage
 
 ```bash
-gh pr-suggest [base-branch]
-gh pr-suggest main --edit
-gh pr-suggest main --create
+gh ultrahope pr suggest [base-branch]
+gh ultrahope pr suggest main --edit
+gh ultrahope pr suggest main --create
 ```
 
 ### Options
@@ -40,12 +42,12 @@ gh pr-suggest main --create
 
 ### Base branch default behavior
 
-If you omit `base-branch`, the tool will **auto-detect the repository’s default branch** via the GitHub REST API (fallback: `origin/HEAD`). If detection fails, it exits with an error.
+If you omit `base-branch`, `gh ultrahope pr suggest` will **auto-detect the repository’s default branch** via the GitHub REST API (fallback: `origin/HEAD`). If detection fails, it exits with an error.
 
 Hints if detection fails:
 
 - Set `GH_REPO=OWNER/REPO`
-- Or pass a base branch explicitly: `gh pr-suggest main`
+- Or pass a base branch explicitly: `gh ultrahope pr suggest main`
 
 ### Environment variables
 
@@ -94,7 +96,7 @@ create:
 
 ### Auto-init wizard (TTY only)
 
-If no config file is found and `stdin` is a TTY, `gh pr-suggest` will start an **English interactive wizard** and create the global config file for you.
+If no config file is found and `stdin` is a TTY, `gh ultrahope pr suggest` will start an **English interactive wizard** and create the global config file for you.
 
 ### Examples
 
@@ -102,7 +104,7 @@ If no config file is found and `stdin` is a TTY, `gh pr-suggest` will start an *
 
 ```bash
 export GH_PR_SUGGEST_LLM_API_KEY="..."
-gh pr-suggest --debug
+gh ultrahope pr suggest --debug
 ```
 
 #### Claude (Anthropic Messages API)
@@ -113,7 +115,7 @@ export GH_PR_SUGGEST_LLM_API_KEY="$ANTHROPIC_API_KEY"
 export GH_PR_SUGGEST_LLM_MODEL="claude-sonnet-4-5"
 # optional:
 # export GH_PR_SUGGEST_LLM_ENDPOINT="https://api.anthropic.com/v1/messages"
-gh pr-suggest
+gh ultrahope pr suggest
 ```
 
 #### Claude-compatible (Anthropic Messages compatible)
@@ -123,7 +125,7 @@ export GH_PR_SUGGEST_LLM_PROVIDER="anthropic_compat"
 export GH_PR_SUGGEST_LLM_API_KEY="..."
 export GH_PR_SUGGEST_LLM_ENDPOINT="https://your-llm.example/v1/messages"
 export GH_PR_SUGGEST_LLM_MODEL="..."
-gh pr-suggest
+gh ultrahope pr suggest
 ```
 
 #### OpenAI-compatible (Chat Completions)
@@ -134,20 +136,6 @@ export GH_PR_SUGGEST_LLM_API_KEY="..."
 # optional:
 # export GH_PR_SUGGEST_LLM_ENDPOINT="https://api.openai.com/v1/chat/completions"
 export GH_PR_SUGGEST_LLM_MODEL="gpt-4o-mini"
-gh pr-suggest
-```
-
-## Make it feel like `gh pr suggest ...`
-
-GitHub CLI extensions cannot be true nested subcommands under `gh pr`, but you can get the UX with an alias:
-
-```bash
-gh alias set "pr suggest" "pr-suggest"
-```
-
-Then you can run:
-
-```bash
-gh pr suggest main --edit
+gh ultrahope pr suggest
 ```
 

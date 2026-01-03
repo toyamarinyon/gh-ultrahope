@@ -1,114 +1,55 @@
 - Goal (incl. success criteria):
-  - Maintain a Continuity Ledger in this workspace and follow `AGENTS.md` instructions.
-  - Success:
-    - `CONTINUITY.md` exists as the canonical session briefing (compaction-safe).
-    - It is updated at the start of each assistant turn and immediately after any file edit.
-    - Each assistant reply begins with a brief “Ledger Snapshot” (Goal + Now/Next + Open Questions).
-  - Reimplement `spec.md` as a Go GitHub CLI extension for suggesting PR title/body.
-  - Success (feature):
-    - `gh pr-suggest [base-branch] [--edit|--create|--debug|--help]` works per `spec.md`.
-    - Document alias so users can run `gh pr suggest ...` via `gh alias set "pr suggest" "pr-suggest"`.
-    - LLM API key env var is required and never logged (even with `--debug`).
-    - Spinner + SIGINT/SIGTERM handling exits with 130.
-    - `--create` shows progress logs + spinner during push/PR creation (no silent wait).
-  - Config goal:
-    - Keep API key required via env var, but allow non-secret settings via config files (gh-like UX).
-    - Success (config):
-      - Support global config at `XDG_CONFIG_HOME/gh-dash/config.yml` (fallback: `$HOME/.config/gh-dash/config.yml`).
-      - Support repo config at `.github/gh-pr-suggest.yml` or `.gh-pr-suggest.yml`.
-      - Precedence: env > repo config > global config > built-in defaults.
-  - LLM provider goal:
-    - Support Anthropic Messages API compatibility and OpenAI Chat Completions compatibility.
-    - Provider selection via env var `GH_PR_SUGGEST_LLM_PROVIDER` (no CLI flags).
-  - Refactor goal:
-    - Replace custom `gh` subprocess wrapper with `github.com/cli/go-gh/v2` for cleaner `gh` execution + errors.
-    - Use `go-gh` repository resolution + REST client to detect repo default branch (keep git fallback).
+  - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
+  - Refactor the GitHub CLI extension from `gh-pr-suggest` into a Cobra-based suite invoked as `gh ultrahope pr suggest [base-branch]`.
+  - Success criteria:
+    - `go build` produces `gh-ultrahope`.
+    - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, base branch auto-detection, debug/secret-safe logging, LLM providers, PR creation flow).
+    - CLI parsing uses `spf13/cobra` with command tree: `ultrahope` → `pr` → `suggest`.
 
 - Constraints/Assumptions:
-  - Follow `AGENTS.md`: read/update `CONTINUITY.md` at the start of every assistant turn; update it immediately after every file edit.
-  - Keep ledger short, factual, and compaction-safe; mark uncertainty as UNCONFIRMED.
-  - Implement `spec.md` as source of truth; TypeScript sample is reference for API call behavior.
-  - As an extension, executable is `gh-pr-suggest` and invocation is `gh pr-suggest ...`.
+  - Do not rewrite business logic; change primarily CLI structure/command parsing/naming.
+  - Use `spf13/cobra` for parsing and help/usage output.
+  - No backward-compat wrapper binary (`gh-pr-suggest`) will be kept (user choice).
+  - Rename Go module path to `github.com/toyamarinyon/gh-ultrahope` (user choice).
 
 - Key decisions:
-  - Create `CONTINUITY.md` to satisfy `AGENTS.md` and use it as the single canonical session briefing designed to survive context compaction.
-  - `gh pr suggest` cannot be implemented as a true nested subcommand via extensions; provide an alias-based UX instead.
-  - LLM provider selection will use env var namespace prefixed with `GH_PR_SUGGEST_LLM_*` (avoid global `LLM_PROVIDER`).
+  - Keep env var/config schema as-is (still `GH_PR_SUGGEST_*`) to avoid behavior churn; update command/help/docs to `ultrahope`.
+  - Extract existing `run()` logic into `internal/prsuggest` so Cobra handlers are thin glue.
+  - Map CLI errors to existing exit codes (0/1/2/130) as closely as practical with Cobra.
+  - Release workflow will NOT set `go_binary_name` (keep relying on default behavior); user may adjust later if needed.
 
 - State:
-  - Repo: `/Users/satoshi/repo/toyamarinyon/gh-pr-suggest` (git repo).
-  - Current branch: `master` (from initial snapshot).
-  - Working tree (current): UNCONFIRMED (not recently re-checked via git status).
-  - Local build cache dirs created: `.gocache/`, `.gotmp/` (user plans to adjust `.gitignore`).
-  - Purpose of `CONTINUITY.md`: persist intent/constraints/decisions/state across context compaction (so the assistant does not rely on earlier chat text unless reflected here).
-  - `main.go` updated to: (1) auto-detect repo default base branch when user does not pass one; (2) create PR without forcing `--head` (let `gh` infer/push as needed).
-  - `main.go` updated to push current branch (set upstream if missing) before running `gh pr create`, so PR creation can work non-interactively when the branch wasn't pushed yet.
-  - `main.go` updated to show stderr progress logs + spinner while pushing and while running `gh pr create` (previously silent until the end).
-  - Spinner messages adjusted so the spinner line itself starts with the spinner and includes the full action text (no separate preceding "Pushing..." / "Creating..." log line).
-  - Plan accepted:
-    - Keep PR creation via `gh pr create`, but execute via `go-gh` (`gh.ExecContext`) instead of custom `exec.Command`.
-    - Default base branch detection will move from `gh repo view` to `go-gh/pkg/repository` + `go-gh/pkg/api` REST (`GET repos/{owner}/{repo}` → `default_branch`), with existing `origin/HEAD` fallback.
-  - In progress:
-    - `main.go`: introduced `execGh(ctx, ...)` backed by `go-gh` and removed the previous `runGh` wrapper; remaining call sites still need to be migrated.
-    - `main.go`: default base branch detection is being refactored to use `go-gh` repo resolution + REST `default_branch` lookup (git `origin/HEAD` remains as fallback).
-    - `main.go`: PR creation now executes `gh pr create` via `execGh(ctx, ...)` (go-gh) instead of a custom subprocess wrapper.
-    - (none)
-  - Reported issue (from another repo execution): `gh pr create` failed with GraphQL errors like `Head sha can't be blank`, `Base sha can't be blank`, `No commits between main and <branch>`, likely due to passing `--head <branch>` (branch not pushed / not resolvable remotely) and/or using default base `main` when repo default branch differs.
+  - Repo: `/Users/satoshi/repo/toyamarinyon/gh-pr-suggest` (git repo; will become ultrahope naming).
+  - Current implementation: single `main.go` with manual parsing and rich logic (LLM/config/PR create).
+  - Command target: `gh ultrahope pr suggest [base-branch]` implemented via Cobra.
+  - Go module path updated to `github.com/toyamarinyon/gh-ultrahope`.
+  - Added Cobra dependency (`github.com/spf13/cobra`) via `go get`; `go.mod`/`go.sum` updated.
+  - Extracted existing implementation into `internal/prsuggest/prsuggest.go` (new package entrypoint: `prsuggest.Run(opts, in, out, errOut)`).
+  - Moved config loader/schema into `internal/prsuggest/config.go` (preserves current file locations/precedence).
+  - Added Cobra root command scaffold in `cmd/root.go` with exit-code mapping.
+  - Disabled Cobra default `completion` subcommand to keep help output minimal/GH-like.
+  - Added `ultrahope pr` namespace command in `cmd/pr.go`.
+  - Added `ultrahope pr suggest` Cobra command in `cmd/pr_suggest.go`, wiring flags/args into `internal/prsuggest`.
+  - Replaced root `main.go` with a Cobra bootstrap that exits with `cmd.Execute()` return code.
+  - Removed obsolete root `config.go` (moved to `internal/prsuggest/config.go`).
+  - README updated to new binary name and command path (`gh ultrahope pr suggest`), while keeping env/config names unchanged.
+  - `go mod tidy` completed; direct deps now include `cobra` and `yaml.v3` (tidy’d).
+  - Release workflow: unchanged (no `go_binary_name`).
 
 - Done:
-  - Read `AGENTS.md`.
-  - Created `CONTINUITY.md` (baseline ledger) because it did not exist; this is required to follow `AGENTS.md`.
-  - Read `spec.md` and `EXTENSION_GUIDE.md`; confirmed extension invocation constraints.
-  - Implemented initial `main.go` scaffold: `-e/-c/-d/-h` parsing + `MINIMAX_*`/editor env loading.
-  - Implemented git command wrappers and data collection (branch, merge-base validation, commit log, diff summary, full diff, changed files).
-  - Fixed `main.go` to compile cleanly (removed unused imports while incremental implementation proceeds).
-  - Implemented prompt construction, topic extraction, MiniMax API call (anthropic-compatible), and spinner output to stderr.
-  - Fixed spinner type definition (removed duplicate placeholder declaration).
-  - Implemented output parsing (TITLE/BODY), `--edit` editor loop, confirmation prompt, and `--create` flow via `gh pr create`.
-  - Added `README.md` with install/usage/env vars and alias instructions for `gh pr suggest`.
-  - Fixed BODY parsing to avoid unsupported regexp lookahead in Go (RE2).
-  - Verified `--help` output via `go run . --help`.
-  - Confirmed release workflow uses `cli/gh-extension-precompile@v2` and follows `gh-pr-suggest-<os>-<arch>[.exe]` asset naming convention.
-  - Implemented base-branch auto-detection (GitHub default branch, fallback to `origin/HEAD`) and removed forced `--head` from `gh pr create` to avoid GraphQL errors when branch is not pushed/remote base differs.
-  - Updated `AGENTS.md` with a development flow note: in restricted environments where Go cannot write to default build cache, use repo-local `GOCACHE`/`GOTMPDIR` (`.gocache/`, `.gotmp/`).
-  - Updated PR creation flow to auto-push the current branch (and set upstream if needed) before calling `gh pr create`.
-  - Added multi-provider LLM support via env vars (no MINIMAX_* backward compatibility):
-    - `GH_PR_SUGGEST_LLM_PROVIDER` selects `minimax_anthropic` / `anthropic` / `anthropic_compat` / `openai_compat`.
-    - `GH_PR_SUGGEST_LLM_API_KEY` / `GH_PR_SUGGEST_LLM_ENDPOINT` / `GH_PR_SUGGEST_LLM_MODEL` configure providers and overrides.
-  - Updated `README.md` and `spec.md` with provider/env var documentation and examples.
-  - Removed `MINIMAX_*` backward compatibility; LLM credentials are configured via `GH_PR_SUGGEST_LLM_*`.
-  - Config support: YAML config loader added and wired into runtime:
-    - Loads global + repo config files and merges (env > repo config > global config > defaults).
-    - LLM provider/endpoint/model defaults, and PR create options (draft/skip confirm) now read from config when env/flags are absent.
-  - Config global path logic updated:
-    - `GH_PR_SUGGEST_CONFIG` overrides.
-    - Otherwise global config is `XDG_CONFIG_HOME/gh-dash/config.yml`, fallback `$HOME/.config/gh-dash/config.yml`.
-  - Docs: `README.md` updated with config file locations, precedence, and YAML example.
-  - Docs: `spec.md` updated with config file locations, precedence, and supported keys.
-  - Docs: `README.md` and `spec.md` updated to remove `base.default`; added notes about base detection error and the auto-init wizard.
-  - `main.go` base-branch behavior updated: no fallback; error if default branch detection fails.
-  - `config.go` updated: removed `base.default` from config schema; added helpers to compute init path and write config YAML (for upcoming wizard).
-  - `config.go` updated: YAML omitempty for `llm.endpoint` so non-compatible configs stay clean.
-  - Wizard: `main.go` now includes TTY detection + interactive init wizard scaffolding (writes global config; prints doc URL).
-  - Wizard: compatible endpoints now prompt for BASE URL (not full path).
-  - Endpoints: `main.go` now normalizes provider endpoints so base URLs (e.g. MiniMax `/anthropic`) are expanded to the full API path (e.g. `/v1/messages`).
-  - Endpoints: `anthropic_compat` now treats endpoint input as BASE_URL and always uses `BASE_URL + /v1/messages` (full URL input is normalized back to base).
-  - Endpoints: `openai_compat` now treats endpoint input as BASE_URL that includes `/v1` and always uses `BASE_URL + /chat/completions` (full URL input is normalized back to base).
-  - Auth: Anthropic-compatible requests use `x-api-key` (MiniMax verification showed `x-api-key` works; removed host-based `Authorization` switching).
-  - Debug: `--debug` now prints `api_key_present` and `api_key_len` (never the key itself) to help diagnose missing/placeholder keys.
-  - Docs: `README.md`/`spec.md` updated to clarify endpoint can be base URL (tool appends path).
-  - Docs: clarified `anthropic_compat` endpoint is BASE URL (tool uses `BASE_URL + /v1/messages`).
+  - Existing `gh-pr-suggest` implementation is functional; refactor to `ultrahope` is the active task.
+  - Ran `gofmt` over `main.go`, `cmd/*.go`, `internal/prsuggest/*.go`.
 
 - Now:
-  - Config init wizard and base-branch behavior updated per plan (no base.default; error if detection fails).
+  - Refactor completed; only optional workflow/repo-rename polish remains outside this session.
 
 - Next:
-  - Consider adding an explicit `--init` flag (optional) to run the wizard on demand (UNCONFIRMED).
-  - Add tests around wizard prompting/path selection (UNCONFIRMED).
+  - Optional (user-owned): rename GitHub repo to `gh-ultrahope` and verify release workflow artifact naming still matches GitHub CLI extension requirements.
 
 - Open questions (UNCONFIRMED if needed):
-  - Whether the failing target repo's default branch is `master` (vs `main`) and whether the head branch existed only locally (not pushed).
+  - None.
 
 - Working set (files/ids/commands):
-  - `AGENTS.md`
-  - `CONTINUITY.md`
+  - `main.go`, `config.go`
+  - `cmd/root.go`, `cmd/pr.go`, `cmd/pr_suggest.go`
+  - `internal/prsuggest/*`

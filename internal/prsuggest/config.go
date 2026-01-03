@@ -1,4 +1,4 @@
-package main
+package prsuggest
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig
 		out.Sources = append(out.Sources, p)
 	}
 
-	// Global config path resolution (requested):
+	// Global config path resolution:
 	// 1) GH_PR_SUGGEST_CONFIG (already handled above)
 	// 2) XDG_CONFIG_HOME/gh-dash/config.yml
 	// 3) $HOME/.config/gh-dash/config.yml
@@ -193,4 +193,3 @@ func writeYAMLConfigFile(path string, cfg FileConfig) error {
 	}
 	return nil
 }
-
