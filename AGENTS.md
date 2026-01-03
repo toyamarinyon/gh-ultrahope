@@ -15,6 +15,19 @@ Maintain a single Continuity Ledger for this workspace in `CONTINUITY.md`. The l
 ### In replies
 - Begin with a brief “Ledger Snapshot” (Goal + Now/Next + Open Questions). Print the full ledger only when it materially changes or when the user asks.
 
+## Development flow (Go build cache workaround)
+
+Some execution environments (e.g. Cursor sandbox) cannot write to Go’s default build cache location (macOS example: `~/Library/Caches/go-build`). In that case, Go commands may fail with errors like:
+
+- `open ~/Library/Caches/go-build/...: operation not permitted`
+
+Workaround: use repository-local cache/temp directories by setting `GOCACHE` and `GOTMPDIR`:
+
+```bash
+GOCACHE="$PWD/.gocache" GOTMPDIR="$PWD/.gotmp" go test ./...
+GOCACHE="$PWD/.gocache" GOTMPDIR="$PWD/.gotmp" go run . --help
+```
+
 ### `CONTINUITY.md` format (keep headings)
 - Goal (incl. success criteria):
 - Constraints/Assumptions:

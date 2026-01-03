@@ -38,6 +38,10 @@ gh pr-suggest main --create
 - `--debug`, `-d`: print extra debug info (never prints secrets)
 - `--help`, `-h`: show help
 
+### Base branch default behavior
+
+If you omit `base-branch`, the tool will **auto-detect the repository’s default branch** via `gh repo view` (fallback: `origin/HEAD`). If detection fails, it falls back to `main`.
+
 ### Environment variables
 
 - `MINIMAX_CP_KEY` (required): API key (**never printed**)

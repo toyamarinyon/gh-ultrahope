@@ -27,7 +27,9 @@
   - Working tree (current): UNCONFIRMED (not recently re-checked via git status).
   - Local build cache dirs created: `.gocache/`, `.gotmp/` (user plans to adjust `.gitignore`).
   - Purpose of `CONTINUITY.md`: persist intent/constraints/decisions/state across context compaction (so the assistant does not rely on earlier chat text unless reflected here).
-  - `main.go` now implements the `spec.md` flow end-to-end (git→prompt→LLM→parse/edit/create).
+  - `main.go` updated to: (1) auto-detect repo default base branch when user does not pass one; (2) create PR without forcing `--head` (let `gh` infer/push as needed).
+  - `main.go` updated to push current branch (set upstream if missing) before running `gh pr create`, so PR creation can work non-interactively when the branch wasn't pushed yet.
+  - Reported issue (from another repo execution): `gh pr create` failed with GraphQL errors like `Head sha can't be blank`, `Base sha can't be blank`, `No commits between main and <branch>`, likely due to passing `--head <branch>` (branch not pushed / not resolvable remotely) and/or using default base `main` when repo default branch differs.
 
 - Done:
   - Read `AGENTS.md`.
@@ -43,15 +45,18 @@
   - Fixed BODY parsing to avoid unsupported regexp lookahead in Go (RE2).
   - Verified `--help` output via `go run . --help`.
   - Confirmed release workflow uses `cli/gh-extension-precompile@v2` and follows `gh-pr-suggest-<os>-<arch>[.exe]` asset naming convention.
+  - Implemented base-branch auto-detection (GitHub default branch, fallback to `origin/HEAD`) and removed forced `--head` from `gh pr create` to avoid GraphQL errors when branch is not pushed/remote base differs.
+  - Updated `AGENTS.md` with a development flow note: in restricted environments where Go cannot write to default build cache, use repo-local `GOCACHE`/`GOTMPDIR` (`.gocache/`, `.gotmp/`).
+  - Updated PR creation flow to auto-push the current branch (and set upstream if needed) before calling `gh pr create`.
 
 - Now:
-  - Remaining housekeeping only (e.g. ignore local build/cache dirs as desired).
+  - Fix `--create` robustness: avoid requiring remote head branch; auto-detect base branch when user didn't pass one. (Implemented)
 
 - Next:
-  - Optionally add `.gocache/`, `.gotmp/` (and local build outputs) to `.gitignore` (user owned).
+  - Verify build and behavior with `--help` and a dry run PR creation invocation. (Build/help OK when using workspace `GOCACHE`/`GOTMPDIR`)
 
 - Open questions (UNCONFIRMED if needed):
-  - None.
+  - Whether the failing target repo's default branch is `master` (vs `main`) and whether the head branch existed only locally (not pushed).
 
 - Working set (files/ids/commands):
   - `AGENTS.md`

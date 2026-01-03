@@ -34,6 +34,7 @@ const (
 
 type Config struct {
 	BaseBranch string
+	BaseGiven  bool
 	Edit       bool
 	Create     bool
 	Debug      bool
@@ -82,14 +83,26 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return exitRuntimeErr
 	}
 
+	baseBranch := cfg.BaseBranch
+	if !cfg.BaseGiven {
+		if detected, err := detectDefaultBaseBranch(ctx, env); err == nil && strings.TrimSpace(detected) != "" {
+			baseBranch = strings.TrimSpace(detected)
+			if cfg.Debug {
+				fmt.Fprintf(errOut, "[debug] detected default base branch=%s\n", baseBranch)
+			}
+		} else if cfg.Debug && err != nil {
+			fmt.Fprintf(errOut, "[debug] failed to detect default base branch: %s\n", err.Error())
+		}
+	}
+
 	// Validate merge base exists.
-	if err := validateMergeBase(ctx, cfg.BaseBranch); err != nil {
-		fmt.Fprintf(errOut, "Error: Cannot find merge base between '%s' and HEAD.\n", cfg.BaseBranch)
+	if err := validateMergeBase(ctx, baseBranch); err != nil {
+		fmt.Fprintf(errOut, "Error: Cannot find merge base between '%s' and HEAD.\n", baseBranch)
 		fmt.Fprintln(errOut, "Make sure the base branch/commit exists.")
 		return exitRuntimeErr
 	}
 
-	commitLog, err := getCommitLog(ctx, cfg.BaseBranch, "HEAD")
+	commitLog, err := getCommitLog(ctx, baseBranch, "HEAD")
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return exitRuntimeErr
@@ -100,23 +113,23 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return exitRuntimeErr
 	}
 
-	diffSummary, err := getDiffSummary(ctx, cfg.BaseBranch)
+	diffSummary, err := getDiffSummary(ctx, baseBranch)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return exitRuntimeErr
 	}
-	detailedDiff, err := getDetailedDiff(ctx, cfg.BaseBranch)
+	detailedDiff, err := getDetailedDiff(ctx, baseBranch)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return exitRuntimeErr
 	}
-	changedFiles, err := getChangedFiles(ctx, cfg.BaseBranch)
+	changedFiles, err := getChangedFiles(ctx, baseBranch)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return exitRuntimeErr
 	}
 
-	prompt := buildPrompt(commitLog, diffSummary, detailedDiff, changedFiles, currentBranch, cfg.BaseBranch)
+	prompt := buildPrompt(commitLog, diffSummary, detailedDiff, changedFiles, currentBranch, baseBranch)
 
 	suggested, err := callLLM(ctx, env, prompt, cfg.Debug, &sp, errOut)
 	if err != nil {
@@ -147,7 +160,7 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 			return exitOK
 		}
 
-		if err := createPullRequest(ctx, env, title, body, currentBranch, cfg.BaseBranch, out, errOut); err != nil {
+		if err := createPullRequest(ctx, env, title, body, currentBranch, baseBranch, cfg.Debug, out, errOut); err != nil {
 			fmt.Fprintln(errOut, err.Error())
 			return exitRuntimeErr
 		}
@@ -189,6 +202,7 @@ func parseArgs(argv []string, errOut io.Writer) (Config, int) {
 	}
 	if len(positional) == 1 {
 		cfg.BaseBranch = positional[0]
+		cfg.BaseGiven = true
 	}
 	return cfg, exitOK
 }
@@ -204,7 +218,7 @@ USAGE:
   gh pr-suggest main --create
 
 OPTIONS:
-  base-branch  Base branch/commit (default: main)
+  base-branch  Base branch/commit (default: auto-detect repo default; fallback: main)
   --edit, -e   Edit the output before printing
   --create, -c Create PR with suggested title/body (with confirmation)
   --debug, -d  Print extra debug info
@@ -303,6 +317,71 @@ func getChangedFiles(ctx context.Context, base string) ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+func pickPushRemote(ctx context.Context) (string, error) {
+	// Prefer origin if it exists; otherwise pick the first remote.
+	out, err := runGit(ctx, "remote")
+	if err != nil {
+		return "", err
+	}
+	var remotes []string
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		l = strings.TrimSpace(l)
+		if l != "" {
+			remotes = append(remotes, l)
+		}
+	}
+	if len(remotes) == 0 {
+		return "", fmt.Errorf("no git remotes configured")
+	}
+	for _, r := range remotes {
+		if r == "origin" {
+			return "origin", nil
+		}
+	}
+	return remotes[0], nil
+}
+
+func ensureBranchPushed(ctx context.Context, branch string, debug bool, errOut io.Writer) error {
+	// If upstream isn't set, push with -u to establish it. If upstream exists and
+	// we're ahead, push to avoid gh pr create failing in non-interactive mode.
+	upstream, err := runGit(ctx, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if err != nil {
+		remote, rerr := pickPushRemote(ctx)
+		if rerr != nil {
+			return rerr
+		}
+		if debug {
+			fmt.Fprintf(errOut, "[debug] no upstream for %s; pushing to %s with -u\n", branch, remote)
+		}
+		_, perr := runGit(ctx, "push", "-u", remote, "HEAD")
+		return perr
+	}
+
+	upstream = strings.TrimSpace(upstream)
+	if upstream == "" {
+		return fmt.Errorf("upstream branch is empty")
+	}
+
+	counts, err := runGit(ctx, "rev-list", "--left-right", "--count", fmt.Sprintf("%s...HEAD", upstream))
+	if err != nil {
+		return err
+	}
+	// Output format: "<behind>\t<ahead>"
+	fields := strings.Fields(strings.ReplaceAll(counts, "\t", " "))
+	if len(fields) != 2 {
+		return fmt.Errorf("unexpected rev-list count output: %q", counts)
+	}
+	ahead := fields[1]
+	if ahead != "0" {
+		if debug {
+			fmt.Fprintf(errOut, "[debug] local branch ahead of %s by %s commits; pushing\n", upstream, ahead)
+		}
+		_, perr := runGit(ctx, "push")
+		return perr
+	}
+	return nil
 }
 
 func runCmd(ctx context.Context, bin string, args []string, stdin io.Reader) (stdout string, stderr string, err error) {
@@ -734,8 +813,38 @@ func runGh(ctx context.Context, args ...string) (string, error) {
 	return strings.TrimRight(stdout, "\n"), nil
 }
 
-func createPullRequest(ctx context.Context, env Env, title, body, head, base string, out io.Writer, errOut io.Writer) error {
-	_ = errOut
+func detectDefaultBaseBranch(ctx context.Context, env Env) (string, error) {
+	// Prefer GitHub's notion of the repo default branch.
+	args := []string{"repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"}
+	if strings.TrimSpace(env.GHRepo) != "" {
+		args = append(args, "--repo", strings.TrimSpace(env.GHRepo))
+	}
+	if out, err := runGh(ctx, args...); err == nil {
+		if s := strings.TrimSpace(out); s != "" {
+			return s, nil
+		}
+	}
+
+	// Fallback to git's remote HEAD symbolic ref if available.
+	ref, err := runGit(ctx, "symbolic-ref", "refs/remotes/origin/HEAD")
+	if err != nil {
+		return "", err
+	}
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", fmt.Errorf("origin/HEAD is empty")
+	}
+	parts := strings.Split(ref, "/")
+	return parts[len(parts)-1], nil
+}
+
+func createPullRequest(ctx context.Context, env Env, title, body, head, base string, debug bool, out io.Writer, errOut io.Writer) error {
+	// Ensure the current branch is pushed so `gh pr create` can run non-interactively
+	// without prompting where to push.
+	if err := ensureBranchPushed(ctx, head, debug, errOut); err != nil {
+		return fmt.Errorf("failed to push current branch: %w", err)
+	}
+
 	tmpDir := os.TempDir()
 	tmpPath := filepath.Join(tmpDir, fmt.Sprintf("gh-pr-body-%d.txt", time.Now().UnixNano()))
 	if err := os.WriteFile(tmpPath, []byte(body), 0o600); err != nil {
@@ -747,7 +856,6 @@ func createPullRequest(ctx context.Context, env Env, title, body, head, base str
 		"pr", "create",
 		"--title", title,
 		"--body-file", tmpPath,
-		"--head", head,
 		"--base", base,
 	}
 	if strings.TrimSpace(env.GHRepo) != "" {
