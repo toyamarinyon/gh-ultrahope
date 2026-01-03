@@ -36,7 +36,7 @@ func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig
 	var out loadedConfig
 
 	// Optional: explicit config path override (still below env var precedence).
-	if p := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_CONFIG")); p != "" {
+	if p := strings.TrimSpace(os.Getenv("ULTRAHOPE_CONFIG")); p != "" {
 		cfg, err := readYAMLConfigFile(p)
 		if err != nil {
 			return loadedConfig{}, err
@@ -46,10 +46,10 @@ func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig
 	}
 
 	// Global config path resolution:
-	// 1) GH_PR_SUGGEST_CONFIG (already handled above)
+	// 1) ULTRAHOPE_CONFIG (already handled above)
 	// 2) XDG_CONFIG_HOME/gh-dash/config.yml
 	// 3) $HOME/.config/gh-dash/config.yml
-	if strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_CONFIG")) == "" {
+	if strings.TrimSpace(os.Getenv("ULTRAHOPE_CONFIG")) == "" {
 		if p := defaultGlobalConfigPath(); p != "" {
 			if cfg, ok, err := readYAMLConfigFileIfExists(p); err != nil {
 				return loadedConfig{}, err
@@ -163,8 +163,8 @@ func mergeFileConfig(base FileConfig, overlay FileConfig) FileConfig {
 }
 
 func configCreationPath() (string, error) {
-	// 1) GH_PR_SUGGEST_CONFIG if present
-	if p := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_CONFIG")); p != "" {
+	// 1) ULTRAHOPE_CONFIG if present
+	if p := strings.TrimSpace(os.Getenv("ULTRAHOPE_CONFIG")); p != "" {
 		return p, nil
 	}
 	// 2) XDG_CONFIG_HOME/gh-dash/config.yml

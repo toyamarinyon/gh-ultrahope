@@ -51,22 +51,22 @@ Hints if detection fails:
 
 ### Environment variables
 
-- `GH_PR_SUGGEST_LLM_PROVIDER` (optional): LLM API type (default: `minimax_anthropic`)
+- `ULTRAHOPE_LLM_PROVIDER` (optional): LLM API type (default: `minimax_anthropic`)
   - `minimax_anthropic`: Anthropic Messages compatible (MiniMax endpoint by default)
   - `anthropic`: Anthropic Messages compatible (Claude)
   - `anthropic_compat`: Anthropic Messages compatible (custom endpoint)
   - `openai_compat`: OpenAI Chat Completions compatible (custom endpoint)
-- `GH_PR_SUGGEST_LLM_API_KEY` (required): API key (**never printed**)
-- `GH_PR_SUGGEST_LLM_ENDPOINT` (optional): API endpoint override
+- `ULTRAHOPE_LLM_API_KEY` (required): API key (**never printed**)
+- `ULTRAHOPE_LLM_ENDPOINT` (optional): API endpoint override
   - For `anthropic_compat`, set a **BASE URL** (the tool uses `BASE_URL + /v1/messages`)
   - For `openai_compat`, set a **BASE URL that includes `/v1`** (the tool uses `BASE_URL + /chat/completions`)
-- `GH_PR_SUGGEST_LLM_MODEL` (optional): model override
+- `ULTRAHOPE_LLM_MODEL` (optional): model override
 - `EDITOR` / `VISUAL` (optional): editor used for `--edit` (default: `vim`)
 - `GH_REPO` (optional): `owner/repo` (if set, passed to `gh pr create --repo`)
 
 ### Configuration files (non-secret defaults)
 
-This tool keeps the **API key required via env var** (`GH_PR_SUGGEST_LLM_API_KEY`), but supports YAML config files for non-secret defaults.
+This tool keeps the **API key required via env var** (`ULTRAHOPE_LLM_API_KEY`), but supports YAML config files for non-secret defaults.
 
 **Search locations (later wins among config files):**
 
@@ -74,7 +74,7 @@ This tool keeps the **API key required via env var** (`GH_PR_SUGGEST_LLM_API_KEY
   - If `XDG_CONFIG_HOME` is set: `$XDG_CONFIG_HOME/gh-dash/config.yml`
   - Else: `$HOME/.config/gh-dash/config.yml`
 - Repo: `.github/gh-pr-suggest.yml` (or `.yaml`), or `.gh-pr-suggest.yml` (or `.yaml`)
-- Optional override: set `GH_PR_SUGGEST_CONFIG=/path/to/config.yml`
+- Optional override: set `ULTRAHOPE_CONFIG=/path/to/config.yml`
 
 **Precedence:**
 
@@ -103,39 +103,39 @@ If no config file is found and `stdin` is a TTY, `gh ultrahope pr suggest` will 
 #### Default (MiniMax Anthropic-compatible)
 
 ```bash
-export GH_PR_SUGGEST_LLM_API_KEY="..."
+export ULTRAHOPE_LLM_API_KEY="..."
 gh ultrahope pr suggest --debug
 ```
 
 #### Claude (Anthropic Messages API)
 
 ```bash
-export GH_PR_SUGGEST_LLM_PROVIDER="anthropic"
-export GH_PR_SUGGEST_LLM_API_KEY="$ANTHROPIC_API_KEY"
-export GH_PR_SUGGEST_LLM_MODEL="claude-sonnet-4-5"
+export ULTRAHOPE_LLM_PROVIDER="anthropic"
+export ULTRAHOPE_LLM_API_KEY="$ANTHROPIC_API_KEY"
+export ULTRAHOPE_LLM_MODEL="claude-sonnet-4-5"
 # optional:
-# export GH_PR_SUGGEST_LLM_ENDPOINT="https://api.anthropic.com/v1/messages"
+# export ULTRAHOPE_LLM_ENDPOINT="https://api.anthropic.com/v1/messages"
 gh ultrahope pr suggest
 ```
 
 #### Claude-compatible (Anthropic Messages compatible)
 
 ```bash
-export GH_PR_SUGGEST_LLM_PROVIDER="anthropic_compat"
-export GH_PR_SUGGEST_LLM_API_KEY="..."
-export GH_PR_SUGGEST_LLM_ENDPOINT="https://your-llm.example/v1/messages"
-export GH_PR_SUGGEST_LLM_MODEL="..."
+export ULTRAHOPE_LLM_PROVIDER="anthropic_compat"
+export ULTRAHOPE_LLM_API_KEY="..."
+export ULTRAHOPE_LLM_ENDPOINT="https://your-llm.example/v1/messages"
+export ULTRAHOPE_LLM_MODEL="..."
 gh ultrahope pr suggest
 ```
 
 #### OpenAI-compatible (Chat Completions)
 
 ```bash
-export GH_PR_SUGGEST_LLM_PROVIDER="openai_compat"
-export GH_PR_SUGGEST_LLM_API_KEY="..."
+export ULTRAHOPE_LLM_PROVIDER="openai_compat"
+export ULTRAHOPE_LLM_API_KEY="..."
 # optional:
-# export GH_PR_SUGGEST_LLM_ENDPOINT="https://api.openai.com/v1/chat/completions"
-export GH_PR_SUGGEST_LLM_MODEL="gpt-4o-mini"
+# export ULTRAHOPE_LLM_ENDPOINT="https://api.openai.com/v1/chat/completions"
+export ULTRAHOPE_LLM_MODEL="gpt-4o-mini"
 gh ultrahope pr suggest
 ```
 

@@ -97,8 +97,8 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 
 	env := readEnv(loadedCfg.Config)
 	if strings.TrimSpace(env.APIKey) == "" {
-		fmt.Fprintln(errOut, "GH_PR_SUGGEST_LLM_API_KEY is not set, so `gh ultrahope pr suggest` cannot run. Please set it:")
-		fmt.Fprintln(errOut, "export GH_PR_SUGGEST_LLM_API_KEY=YOUR_LLM_API_KEY")
+		fmt.Fprintln(errOut, "ULTRAHOPE_LLM_API_KEY is not set, so `gh ultrahope pr suggest` cannot run. Please set it:")
+		fmt.Fprintln(errOut, "export ULTRAHOPE_LLM_API_KEY=YOUR_LLM_API_KEY")
 		return ExitRuntimeErr
 	}
 	if err := validateEnv(env); err != nil {
@@ -223,16 +223,16 @@ func readEnv(fileCfg FileConfig) Env {
 	}
 
 	// Provider selection and shared overrides (avoid global env var namespace).
-	provider := strings.ToLower(strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_PROVIDER")))
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("ULTRAHOPE_LLM_PROVIDER")))
 	if provider == "" {
 		provider = strings.ToLower(strings.TrimSpace(fileCfg.LLM.Provider))
 	}
 	if provider == "" {
 		provider = string(providerMinimaxAnthropic)
 	}
-	commonKey := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_API_KEY"))
-	commonEndpoint := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_ENDPOINT"))
-	commonModel := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_MODEL"))
+	commonKey := strings.TrimSpace(os.Getenv("ULTRAHOPE_LLM_API_KEY"))
+	commonEndpoint := strings.TrimSpace(os.Getenv("ULTRAHOPE_LLM_ENDPOINT"))
+	commonModel := strings.TrimSpace(os.Getenv("ULTRAHOPE_LLM_MODEL"))
 	if commonEndpoint == "" {
 		commonEndpoint = strings.TrimSpace(fileCfg.LLM.Endpoint)
 	}
@@ -277,27 +277,27 @@ func validateEnv(env Env) error {
 	switch env.Provider {
 	case providerMinimaxAnthropic:
 		if strings.TrimSpace(env.APIKey) == "" {
-			return fmt.Errorf("Missing GH_PR_SUGGEST_LLM_API_KEY env var (provider=%s).", env.Provider)
+			return fmt.Errorf("Missing ULTRAHOPE_LLM_API_KEY env var (provider=%s).", env.Provider)
 		}
 	case providerAnthropic, providerAnthropicCompat, providerOpenAICompat:
 		if strings.TrimSpace(env.APIKey) == "" {
-			return fmt.Errorf("Missing GH_PR_SUGGEST_LLM_API_KEY env var (provider=%s).", env.Provider)
+			return fmt.Errorf("Missing ULTRAHOPE_LLM_API_KEY env var (provider=%s).", env.Provider)
 		}
 	default:
-		return fmt.Errorf("Invalid GH_PR_SUGGEST_LLM_PROVIDER=%q. Supported: %s, %s, %s, %s.",
+		return fmt.Errorf("Invalid ULTRAHOPE_LLM_PROVIDER=%q. Supported: %s, %s, %s, %s.",
 			string(env.Provider),
 			providerMinimaxAnthropic, providerAnthropic, providerAnthropicCompat, providerOpenAICompat,
 		)
 	}
 	if looksLikePlaceholderKey(env.APIKey) {
-		return fmt.Errorf("GH_PR_SUGGEST_LLM_API_KEY looks like a placeholder value. Please set the real API key.")
+		return fmt.Errorf("ULTRAHOPE_LLM_API_KEY looks like a placeholder value. Please set the real API key.")
 	}
 
 	if strings.TrimSpace(env.Endpoint) == "" {
-		return fmt.Errorf("LLM endpoint is empty (provider=%s). Set GH_PR_SUGGEST_LLM_ENDPOINT.", env.Provider)
+		return fmt.Errorf("LLM endpoint is empty (provider=%s). Set ULTRAHOPE_LLM_ENDPOINT.", env.Provider)
 	}
 	if strings.TrimSpace(env.Model) == "" {
-		return fmt.Errorf("LLM model is empty (provider=%s). Set GH_PR_SUGGEST_LLM_MODEL.", env.Provider)
+		return fmt.Errorf("LLM model is empty (provider=%s). Set ULTRAHOPE_LLM_MODEL.", env.Provider)
 	}
 	return nil
 }
