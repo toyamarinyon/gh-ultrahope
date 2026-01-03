@@ -11,6 +11,12 @@
     - LLM API key env var is required and never logged (even with `--debug`).
     - Spinner + SIGINT/SIGTERM handling exits with 130.
     - `--create` shows progress logs + spinner during push/PR creation (no silent wait).
+  - Config goal:
+    - Keep API key required via env var, but allow non-secret settings via config files (gh-like UX).
+    - Success (config):
+      - Support global config at `XDG_CONFIG_HOME/gh-dash/config.yml` (fallback: `$HOME/.config/gh-dash/config.yml`).
+      - Support repo config at `.github/gh-pr-suggest.yml` or `.gh-pr-suggest.yml`.
+      - Precedence: env > repo config > global config > built-in defaults.
   - LLM provider goal:
     - Support Anthropic Messages API compatibility and OpenAI Chat Completions compatibility.
     - Provider selection via env var `GH_PR_SUGGEST_LLM_PROVIDER` (no CLI flags).
@@ -71,13 +77,34 @@
     - `GH_PR_SUGGEST_LLM_API_KEY` / `GH_PR_SUGGEST_LLM_ENDPOINT` / `GH_PR_SUGGEST_LLM_MODEL` configure providers and overrides.
   - Updated `README.md` and `spec.md` with provider/env var documentation and examples.
   - Removed `MINIMAX_*` backward compatibility; LLM credentials are configured via `GH_PR_SUGGEST_LLM_*`.
+  - Config support: YAML config loader added and wired into runtime:
+    - Loads global + repo config files and merges (env > repo config > global config > defaults).
+    - LLM provider/endpoint/model defaults, and PR create options (draft/skip confirm) now read from config when env/flags are absent.
+  - Config global path logic updated:
+    - `GH_PR_SUGGEST_CONFIG` overrides.
+    - Otherwise global config is `XDG_CONFIG_HOME/gh-dash/config.yml`, fallback `$HOME/.config/gh-dash/config.yml`.
+  - Docs: `README.md` updated with config file locations, precedence, and YAML example.
+  - Docs: `spec.md` updated with config file locations, precedence, and supported keys.
+  - Docs: `README.md` and `spec.md` updated to remove `base.default`; added notes about base detection error and the auto-init wizard.
+  - `main.go` base-branch behavior updated: no fallback; error if default branch detection fails.
+  - `config.go` updated: removed `base.default` from config schema; added helpers to compute init path and write config YAML (for upcoming wizard).
+  - `config.go` updated: YAML omitempty for `llm.endpoint` so non-compatible configs stay clean.
+  - Wizard: `main.go` now includes TTY detection + interactive init wizard scaffolding (writes global config; prints doc URL).
+  - Wizard: compatible endpoints now prompt for BASE URL (not full path).
+  - Endpoints: `main.go` now normalizes provider endpoints so base URLs (e.g. MiniMax `/anthropic`) are expanded to the full API path (e.g. `/v1/messages`).
+  - Endpoints: `anthropic_compat` now treats endpoint input as BASE_URL and always uses `BASE_URL + /v1/messages` (full URL input is normalized back to base).
+  - Endpoints: `openai_compat` now treats endpoint input as BASE_URL that includes `/v1` and always uses `BASE_URL + /chat/completions` (full URL input is normalized back to base).
+  - Auth: Anthropic-compatible requests use `x-api-key` (MiniMax verification showed `x-api-key` works; removed host-based `Authorization` switching).
+  - Debug: `--debug` now prints `api_key_present` and `api_key_len` (never the key itself) to help diagnose missing/placeholder keys.
+  - Docs: `README.md`/`spec.md` updated to clarify endpoint can be base URL (tool appends path).
+  - Docs: clarified `anthropic_compat` endpoint is BASE URL (tool uses `BASE_URL + /v1/messages`).
 
 - Now:
-  - Finalize multi-provider LLM support docs and verify build/help.
+  - Config init wizard and base-branch behavior updated per plan (no base.default; error if detection fails).
 
 - Next:
-  - Update docs (`README.md`, `spec.md`) to describe provider env vars and examples.
-  - Verify `main.go` compiles and basic `--help` still works.
+  - Consider adding an explicit `--init` flag (optional) to run the wizard on demand (UNCONFIRMED).
+  - Add tests around wizard prompting/path selection (UNCONFIRMED).
 
 - Open questions (UNCONFIRMED if needed):
   - Whether the failing target repo's default branch is `master` (vs `main`) and whether the head branch existed only locally (not pushed).

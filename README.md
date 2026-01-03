@@ -40,7 +40,12 @@ gh pr-suggest main --create
 
 ### Base branch default behavior
 
-If you omit `base-branch`, the tool will **auto-detect the repository’s default branch** via the GitHub REST API (fallback: `origin/HEAD`). If detection fails, it falls back to `main`.
+If you omit `base-branch`, the tool will **auto-detect the repository’s default branch** via the GitHub REST API (fallback: `origin/HEAD`). If detection fails, it exits with an error.
+
+Hints if detection fails:
+
+- Set `GH_REPO=OWNER/REPO`
+- Or pass a base branch explicitly: `gh pr-suggest main`
 
 ### Environment variables
 
@@ -51,9 +56,45 @@ If you omit `base-branch`, the tool will **auto-detect the repository’s defaul
   - `openai_compat`: OpenAI Chat Completions compatible (custom endpoint)
 - `GH_PR_SUGGEST_LLM_API_KEY` (required): API key (**never printed**)
 - `GH_PR_SUGGEST_LLM_ENDPOINT` (optional): API endpoint override
+  - For `anthropic_compat`, set a **BASE URL** (the tool uses `BASE_URL + /v1/messages`)
+  - For `openai_compat`, set a **BASE URL that includes `/v1`** (the tool uses `BASE_URL + /chat/completions`)
 - `GH_PR_SUGGEST_LLM_MODEL` (optional): model override
 - `EDITOR` / `VISUAL` (optional): editor used for `--edit` (default: `vim`)
 - `GH_REPO` (optional): `owner/repo` (if set, passed to `gh pr create --repo`)
+
+### Configuration files (non-secret defaults)
+
+This tool keeps the **API key required via env var** (`GH_PR_SUGGEST_LLM_API_KEY`), but supports YAML config files for non-secret defaults.
+
+**Search locations (later wins among config files):**
+
+- Global:
+  - If `XDG_CONFIG_HOME` is set: `$XDG_CONFIG_HOME/gh-dash/config.yml`
+  - Else: `$HOME/.config/gh-dash/config.yml`
+- Repo: `.github/gh-pr-suggest.yml` (or `.yaml`), or `.gh-pr-suggest.yml` (or `.yaml`)
+- Optional override: set `GH_PR_SUGGEST_CONFIG=/path/to/config.yml`
+
+**Precedence:**
+
+`env > repo config > global config > built-in defaults`
+
+**Example (`config.yml`):**
+
+```yaml
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-5
+  # endpoint is optional; defaults per provider
+  # endpoint: https://api.anthropic.com/v1/messages
+
+create:
+  draft: true
+  skip_confirm: false
+```
+
+### Auto-init wizard (TTY only)
+
+If no config file is found and `stdin` is a TTY, `gh pr-suggest` will start an **English interactive wizard** and create the global config file for you.
 
 ### Examples
 

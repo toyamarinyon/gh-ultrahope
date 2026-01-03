@@ -35,13 +35,42 @@ gh-pr-suggest main --create
 |----------|----------|-------------|---------|
 | `GH_PR_SUGGEST_LLM_PROVIDER` | No | LLM API type: `minimax_anthropic` (default), `anthropic`, `anthropic_compat`, `openai_compat` | `minimax_anthropic` |
 | `GH_PR_SUGGEST_LLM_API_KEY` | Yes | API key for the selected provider | - |
-| `GH_PR_SUGGEST_LLM_ENDPOINT` | No | API endpoint URL override | provider default |
+| `GH_PR_SUGGEST_LLM_ENDPOINT` | No | API endpoint URL override. For `anthropic_compat`, set a BASE URL (the tool uses `BASE_URL + /v1/messages`). For `openai_compat`, set a BASE URL that includes `/v1` (the tool uses `BASE_URL + /chat/completions`). | provider default |
 | `GH_PR_SUGGEST_LLM_MODEL` | No | Model name override | provider default |
 | `EDITOR` | No* | Editor to use for editing (--edit mode) | `vim` |
 | `VISUAL` | No* | Alternative editor (fallback) | `vim` |
 | `GH_REPO` | No* | Repository in `owner/repo` format (auto-detected by `gh`) | auto-detected |
 
 *Required only when using the respective features.
+
+### Configuration files (non-secret defaults)
+
+The tool keeps the API key required via env var, but supports YAML config files for non-secret defaults.
+
+**Search locations:**
+
+- Global:
+  - If `XDG_CONFIG_HOME` is set: `$XDG_CONFIG_HOME/gh-dash/config.yml`
+  - Else: `$HOME/.config/gh-dash/config.yml`
+- Repo: `.github/gh-pr-suggest.yml` (or `.yaml`), or `.gh-pr-suggest.yml` (or `.yaml`)
+- Optional override: `GH_PR_SUGGEST_CONFIG=/path/to/config.yml`
+
+**Precedence:**
+
+`env > repo config > global config > built-in defaults`
+
+**Supported keys (current):**
+
+- `llm.provider`, `llm.endpoint`, `llm.model`
+- `create.draft`, `create.skip_confirm`
+
+### Auto-init wizard (TTY only)
+
+If no config file is found and `stdin` is a TTY, the tool starts an English interactive wizard and creates the global config file automatically.
+
+### Base branch behavior (no fallback)
+
+If you omit `base-branch`, the tool auto-detects the repository’s default branch (GitHub REST API; fallback: `origin/HEAD`). If detection fails, the command exits with an error. Set `GH_REPO=OWNER/REPO` or pass a base branch explicitly.
 
 ## Core Features
 

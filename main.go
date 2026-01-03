@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -26,12 +28,11 @@ import (
 )
 
 const (
-	defaultBaseBranch        = "main"
-	defaultMinimaxEndpoint   = "https://api.minimax.io/anthropic/v1/messages"
+	defaultMinimaxEndpoint   = "https://api.minimax.io/anthropic"
 	defaultMinimaxModel      = "MiniMax-M2.1"
 	defaultAnthropicEndpoint = "https://api.anthropic.com/v1/messages"
 	defaultAnthropicModel    = "claude-sonnet-4-5"
-	defaultOpenAIEndpoint    = "https://api.openai.com/v1/chat/completions"
+	defaultOpenAIEndpoint    = "https://api.openai.com/v1"
 	defaultOpenAIModel       = "gpt-4o-mini"
 
 	exitOK          = 0
@@ -83,17 +84,41 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return exitOK
 	}
 
-	env := readEnv()
-	if err := validateEnv(env); err != nil {
-		fmt.Fprintln(errOut, err.Error())
-		return exitRuntimeErr
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var sp Spinner
 	setupSignalHandlers(ctx, cancel, &sp, errOut)
+
+	loadedCfg, err := loadConfig(ctx, cfg.Debug, errOut)
+	if err != nil {
+		fmt.Fprintln(errOut, err.Error())
+		return exitRuntimeErr
+	}
+
+	if len(loadedCfg.Sources) == 0 && isTTY(in) {
+		if err := runInitWizard(in, errOut); err != nil {
+			fmt.Fprintln(errOut, err.Error())
+			return exitRuntimeErr
+		}
+		// Reload after creating config.
+		loadedCfg, err = loadConfig(ctx, cfg.Debug, errOut)
+		if err != nil {
+			fmt.Fprintln(errOut, err.Error())
+			return exitRuntimeErr
+		}
+	}
+
+	env := readEnv(loadedCfg.Config)
+	if strings.TrimSpace(env.APIKey) == "" {
+		fmt.Fprintln(errOut, "GH_PR_SUGGEST_LLM_API_KEY is not set, so gh-pr-suggest cannot run. Please set it:")
+		fmt.Fprintln(errOut, "export GH_PR_SUGGEST_LLM_API_KEY=YOUR_LLM_API_KEY")
+		return exitRuntimeErr
+	}
+	if err := validateEnv(env); err != nil {
+		fmt.Fprintln(errOut, err.Error())
+		return exitRuntimeErr
+	}
 
 	currentBranch, err := getCurrentBranch(ctx)
 	if err != nil {
@@ -101,15 +126,23 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return exitRuntimeErr
 	}
 
-	baseBranch := cfg.BaseBranch
-	if !cfg.BaseGiven {
-		if detected, err := detectDefaultBaseBranch(ctx, env); err == nil && strings.TrimSpace(detected) != "" {
-			baseBranch = strings.TrimSpace(detected)
-			if cfg.Debug {
-				fmt.Fprintf(errOut, "[debug] detected default base branch=%s\n", baseBranch)
+	var baseBranch string
+	if cfg.BaseGiven {
+		baseBranch = cfg.BaseBranch
+	} else {
+		detected, err := detectDefaultBaseBranch(ctx, env)
+		if err != nil || strings.TrimSpace(detected) == "" {
+			if cfg.Debug && err != nil {
+				fmt.Fprintf(errOut, "[debug] failed to detect default base branch: %s\n", err.Error())
 			}
-		} else if cfg.Debug && err != nil {
-			fmt.Fprintf(errOut, "[debug] failed to detect default base branch: %s\n", err.Error())
+			fmt.Fprintln(errOut, "Error: Unable to determine the repository default base branch.")
+			fmt.Fprintln(errOut, "Hint: Set GH_REPO=OWNER/REPO, or pass a base branch explicitly:")
+			fmt.Fprintln(errOut, "  gh pr-suggest main")
+			return exitRuntimeErr
+		}
+		baseBranch = strings.TrimSpace(detected)
+		if cfg.Debug {
+			fmt.Fprintf(errOut, "[debug] detected default base branch=%s\n", baseBranch)
 		}
 	}
 
@@ -168,17 +201,24 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 	fmt.Fprintln(out, outputText)
 
 	if cfg.Create {
+		skipConfirm := loadedCfg.Config.Create.SkipConfirm != nil && *loadedCfg.Config.Create.SkipConfirm
+		draft := loadedCfg.Config.Create.Draft != nil && *loadedCfg.Config.Create.Draft
+
 		title, body := parseSuggestedOutput(outputText)
 		if strings.TrimSpace(title) == "" {
 			fmt.Fprintln(errOut, "Failed to parse TITLE from suggested output.")
 			return exitRuntimeErr
 		}
 
-		if !confirm(in, errOut, "Create pull request with this title/body? [y/N] ") {
-			return exitOK
+		if !skipConfirm {
+			if !confirm(in, errOut, "Create pull request with this title/body? [y/N] ") {
+				return exitOK
+			}
+		} else if cfg.Debug {
+			fmt.Fprintln(errOut, "[debug] create.skip_confirm=true; skipping confirmation prompt")
 		}
 
-		if err := createPullRequest(ctx, env, title, body, currentBranch, baseBranch, cfg.Debug, &sp, out, errOut); err != nil {
+		if err := createPullRequest(ctx, env, title, body, currentBranch, baseBranch, draft, cfg.Debug, &sp, out, errOut); err != nil {
 			fmt.Fprintln(errOut, err.Error())
 			return exitRuntimeErr
 		}
@@ -188,9 +228,7 @@ func run(argv []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 }
 
 func parseArgs(argv []string, errOut io.Writer) (Config, int) {
-	cfg := Config{
-		BaseBranch: defaultBaseBranch,
-	}
+	var cfg Config
 
 	var positional []string
 
@@ -236,14 +274,14 @@ USAGE:
   gh pr-suggest main --create
 
 OPTIONS:
-  base-branch  Base branch/commit (default: auto-detect repo default; fallback: main)
+  base-branch  Base branch/commit (default: auto-detect repo default; error if detection fails)
   --edit, -e   Edit the output before printing
   --create, -c Create PR with suggested title/body (with confirmation)
   --debug, -d  Print extra debug info
   --help, -h   Show help`)
 }
 
-func readEnv() Env {
+func readEnv(fileCfg FileConfig) Env {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = os.Getenv("VISUAL")
@@ -255,11 +293,20 @@ func readEnv() Env {
 	// Provider selection and shared overrides (avoid global env var namespace).
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_PROVIDER")))
 	if provider == "" {
+		provider = strings.ToLower(strings.TrimSpace(fileCfg.LLM.Provider))
+	}
+	if provider == "" {
 		provider = string(providerMinimaxAnthropic)
 	}
 	commonKey := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_API_KEY"))
 	commonEndpoint := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_ENDPOINT"))
 	commonModel := strings.TrimSpace(os.Getenv("GH_PR_SUGGEST_LLM_MODEL"))
+	if commonEndpoint == "" {
+		commonEndpoint = strings.TrimSpace(fileCfg.LLM.Endpoint)
+	}
+	if commonModel == "" {
+		commonModel = strings.TrimSpace(fileCfg.LLM.Model)
+	}
 
 	var apiKey, endpoint, model string
 	switch LLMProvider(provider) {
@@ -281,6 +328,8 @@ func readEnv() Env {
 		endpoint = firstNonEmpty(commonEndpoint, defaultMinimaxEndpoint)
 		model = firstNonEmpty(commonModel, defaultMinimaxModel)
 	}
+
+	endpoint = normalizeEndpoint(LLMProvider(provider), endpoint)
 
 	return Env{
 		Provider: LLMProvider(provider),
@@ -308,6 +357,9 @@ func validateEnv(env Env) error {
 			providerMinimaxAnthropic, providerAnthropic, providerAnthropicCompat, providerOpenAICompat,
 		)
 	}
+	if looksLikePlaceholderKey(env.APIKey) {
+		return fmt.Errorf("GH_PR_SUGGEST_LLM_API_KEY looks like a placeholder value. Please set the real API key.")
+	}
 
 	if strings.TrimSpace(env.Endpoint) == "" {
 		return fmt.Errorf("LLM endpoint is empty (provider=%s). Set GH_PR_SUGGEST_LLM_ENDPOINT.", env.Provider)
@@ -318,6 +370,22 @@ func validateEnv(env Env) error {
 	return nil
 }
 
+func looksLikePlaceholderKey(key string) bool {
+	k := strings.TrimSpace(key)
+	if k == "" {
+		return true
+	}
+	upper := strings.ToUpper(k)
+	if strings.Contains(upper, "YOUR_LLM_API_KEY") || strings.Contains(upper, "YOUR_API_KEY") {
+		return true
+	}
+	// Common placeholder patterns.
+	if k == "..." || strings.Contains(k, "REPLACE_ME") || strings.Contains(k, "CHANGEME") {
+		return true
+	}
+	return false
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
@@ -325,6 +393,112 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeEndpoint(provider LLMProvider, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	suffix := ""
+	switch provider {
+	case providerAnthropicCompat:
+		// For anthropic-compatible endpoints, treat the user value as BASE_URL and
+		// always build BASE_URL + "/v1/messages" to avoid ambiguity.
+		return forceBaseSuffix(raw, "/v1/messages")
+	case providerOpenAICompat:
+		// For OpenAI-compatible chat endpoints, treat the user value as BASE_URL and
+		// always build BASE_URL + "/chat/completions" to avoid ambiguity.
+		// Convention: BASE_URL includes "/v1" (e.g. https://api.provider.com/v1).
+		return forceOpenAICompatBase(raw)
+	case providerMinimaxAnthropic, providerAnthropic:
+		suffix = "/v1/messages"
+	default:
+		return raw
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		// If it's not a normal URL, don't try to rewrite it.
+		return raw
+	}
+
+	trimmedPath := strings.TrimRight(u.Path, "/")
+	if strings.HasSuffix(trimmedPath, suffix) {
+		return raw
+	}
+	// If the user passed a base URL like "https://api.minimax.io/anthropic" or
+	// "https://api.anthropic.com", append the provider-specific path.
+	// Heuristic: if it doesn't include "/v1/", treat it as a base path.
+	if !strings.Contains(trimmedPath, "/v1/") {
+		u.Path = path.Join(u.Path, suffix)
+		return u.String()
+	}
+	return raw
+}
+
+func forceBaseSuffix(raw string, suffix string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+
+	trimmedPath := strings.TrimRight(u.Path, "/")
+
+	// If the user provided a full URL ending with the suffix, strip it to get BASE_URL.
+	if strings.HasSuffix(trimmedPath, suffix) {
+		trimmedPath = strings.TrimSuffix(trimmedPath, suffix)
+		trimmedPath = strings.TrimRight(trimmedPath, "/")
+	}
+
+	// If the path contains /v1/, assume they accidentally provided a versioned path;
+	// keep only the portion before /v1/ as the BASE_URL path.
+	if idx := strings.Index(trimmedPath, "/v1/"); idx >= 0 {
+		trimmedPath = strings.TrimRight(trimmedPath[:idx], "/")
+	}
+
+	u.Path = path.Join(trimmedPath, suffix)
+	return u.String()
+}
+
+func forceOpenAICompatBase(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+
+	trimmedPath := strings.TrimRight(u.Path, "/")
+
+	// If a full endpoint was provided, normalize back to BASE_URL.
+	if strings.HasSuffix(trimmedPath, "/v1/chat/completions") {
+		trimmedPath = strings.TrimSuffix(trimmedPath, "/v1/chat/completions")
+		trimmedPath = strings.TrimRight(trimmedPath, "/")
+	}
+	if strings.HasSuffix(trimmedPath, "/chat/completions") {
+		trimmedPath = strings.TrimSuffix(trimmedPath, "/chat/completions")
+		trimmedPath = strings.TrimRight(trimmedPath, "/")
+	}
+
+	// Enforce the convention that BASE_URL contains "/v1".
+	if trimmedPath == "" {
+		trimmedPath = "/v1"
+	} else if !strings.HasSuffix(trimmedPath, "/v1") {
+		// If user passed something like https://api.provider.com, make it .../v1
+		// so we consistently build /v1/chat/completions.
+		trimmedPath = path.Join(trimmedPath, "/v1")
+	}
+
+	u.Path = path.Join(trimmedPath, "/chat/completions")
+	return u.String()
 }
 
 // ---- git wrappers ----
@@ -711,7 +885,8 @@ func callLLM(ctx context.Context, env Env, prompt string, debug bool, spinner *S
 
 func callAnthropicMessages(ctx context.Context, env Env, prompt string, debug bool, spinner *Spinner, errOut io.Writer) (string, error) {
 	if debug {
-		fmt.Fprintf(errOut, "[debug] provider=%s endpoint=%s model=%s\n", env.Provider, env.Endpoint, env.Model)
+		fmt.Fprintf(errOut, "[debug] provider=%s endpoint=%s model=%s api_key_present=%t api_key_len=%d\n",
+			env.Provider, env.Endpoint, env.Model, strings.TrimSpace(env.APIKey) != "", len(strings.TrimSpace(env.APIKey)))
 	}
 
 	reqBody := llmRequest{
@@ -732,6 +907,8 @@ func callAnthropicMessages(ctx context.Context, env Env, prompt string, debug bo
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Anthropic Messages API shape uses `x-api-key`. (MiniMax's Anthropic-compatible
+	// endpoint also accepts `x-api-key` per local verification.)
 	req.Header.Set("x-api-key", env.APIKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
@@ -829,7 +1006,8 @@ type openAIChatResponse struct {
 
 func callOpenAIChatCompletions(ctx context.Context, env Env, prompt string, debug bool, spinner *Spinner, errOut io.Writer) (string, error) {
 	if debug {
-		fmt.Fprintf(errOut, "[debug] provider=%s endpoint=%s model=%s\n", env.Provider, env.Endpoint, env.Model)
+		fmt.Fprintf(errOut, "[debug] provider=%s endpoint=%s model=%s api_key_present=%t api_key_len=%d\n",
+			env.Provider, env.Endpoint, env.Model, strings.TrimSpace(env.APIKey) != "", len(strings.TrimSpace(env.APIKey)))
 	}
 
 	reqBody := openAIChatRequest{
@@ -1022,6 +1200,118 @@ func confirm(in io.Reader, errOut io.Writer, prompt string) bool {
 	return resp == "y" || resp == "yes"
 }
 
+func isTTY(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+const wizardDocURL = "https://github.com/toyamarinyon/gh-pr-suggest#configuration-files-non-secret-defaults"
+
+func runInitWizard(in io.Reader, errOut io.Writer) error {
+	r := bufio.NewReader(in)
+
+	fmt.Fprintln(errOut, "We'll start configuring gh-pr-suggest extension.")
+	fmt.Fprintln(errOut, "")
+	fmt.Fprintln(errOut, "Select LLM API:")
+	fmt.Fprintln(errOut, "  1) OpenAI")
+	fmt.Fprintln(errOut, "  2) OpenAI Compatible (Chat)")
+	fmt.Fprintln(errOut, "  3) Anthropic")
+	fmt.Fprintln(errOut, "  4) Anthropic Compatible")
+
+	var provider string
+	needsEndpoint := false
+
+	for {
+		fmt.Fprint(errOut, "Enter selection [1-4]: ")
+		line, err := r.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return err
+		}
+		sel := strings.TrimSpace(line)
+		switch sel {
+		case "1":
+			provider = string(providerOpenAICompat)
+		case "2":
+			provider = string(providerOpenAICompat)
+			needsEndpoint = true
+		case "3":
+			provider = string(providerAnthropic)
+		case "4":
+			provider = string(providerAnthropicCompat)
+			needsEndpoint = true
+		default:
+			if err == io.EOF {
+				return fmt.Errorf("input aborted")
+			}
+			continue
+		}
+		break
+	}
+
+	endpoint := ""
+	if needsEndpoint {
+		for {
+			fmt.Fprint(errOut, "Enter API base URL: ")
+			line, err := r.ReadString('\n')
+			if err != nil && err != io.EOF {
+				return err
+			}
+			endpoint = strings.TrimSpace(line)
+			if endpoint == "" {
+				if err == io.EOF {
+					return fmt.Errorf("input aborted")
+				}
+				continue
+			}
+			break
+		}
+	}
+
+	model := ""
+	for {
+		fmt.Fprint(errOut, "Enter model: ")
+		line, err := r.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return err
+		}
+		model = strings.TrimSpace(line)
+		if model == "" {
+			if err == io.EOF {
+				return fmt.Errorf("input aborted")
+			}
+			continue
+		}
+		break
+	}
+
+	path, err := configCreationPath()
+	if err != nil {
+		return err
+	}
+
+	cfg := FileConfig{
+		LLM: LLMConfig{
+			Provider: provider,
+			Endpoint: endpoint,
+			Model:    model,
+		},
+	}
+	if err := writeYAMLConfigFile(path, cfg); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(errOut, "")
+	fmt.Fprintf(errOut, "Created config file at %s. For other settings, see %s.\n", path, wizardDocURL)
+	return nil
+}
+
 func execGh(ctx context.Context, args ...string) (string, error) {
 	stdout, stderr, err := gh.ExecContext(ctx, args...)
 	if err != nil {
@@ -1087,7 +1377,7 @@ func detectDefaultBaseBranch(ctx context.Context, env Env) (string, error) {
 	return parts[len(parts)-1], nil
 }
 
-func createPullRequest(ctx context.Context, env Env, title, body, head, base string, debug bool, spinner *Spinner, out io.Writer, errOut io.Writer) error {
+func createPullRequest(ctx context.Context, env Env, title, body, head, base string, draft bool, debug bool, spinner *Spinner, out io.Writer, errOut io.Writer) error {
 	// Ensure the current branch is pushed so `gh pr create` can run non-interactively
 	// without prompting where to push.
 	if err := ensureBranchPushed(ctx, head, debug, spinner, errOut); err != nil {
@@ -1106,6 +1396,9 @@ func createPullRequest(ctx context.Context, env Env, title, body, head, base str
 		"--title", title,
 		"--body-file", tmpPath,
 		"--base", base,
+	}
+	if draft {
+		args = append(args, "--draft")
 	}
 	if strings.TrimSpace(env.GHRepo) != "" {
 		args = append(args, "--repo", strings.TrimSpace(env.GHRepo))
