@@ -30,20 +30,28 @@ gh extension install .
 ```bash
 gh ultrahope pr suggest [base-branch]
 gh ultrahope pr suggest main --edit
-gh ultrahope pr suggest main --create
+gh ultrahope pr suggest main --dry-run
 gh ultrahope config
 ```
+
+By default, `gh ultrahope pr suggest` prints the suggested title/body, then asks for confirmation and creates a pull request.
+Use `--dry-run` to only print the suggestion (no confirmation prompt, no PR creation).
 
 ### Options
 
 - `--edit`, `-e`: edit the suggested output in `$EDITOR` before printing
-- `--create`, `-c`: create a PR with the suggested title/body (with confirmation)
+- `--dry-run`, `-n`: print suggested title/body only (do not create PR)
 - `--debug`, `-d`: print extra debug info (never prints secrets)
 - `--help`, `-h`: show help
 
 ### Base branch default behavior
 
-If you omit `base-branch`, `gh ultrahope pr suggest` will **auto-detect the repository’s default branch** via the GitHub REST API (fallback: `origin/HEAD`). If detection fails, it exits with an error.
+If you omit `base-branch`, `gh ultrahope pr suggest` will auto-detect the base branch using a two-step process:
+
+1. **Stacked branch detection (preferred):** Walks up to 200 commits from HEAD to find the first commit that has a remote tracking branch (`origin/*`) pointing to it. This enables seamless workflows with stacked PRs—if you're on `feature-b` which branches off `feature-a`, it will automatically detect `feature-a` as the base, not the repo default branch.
+2. **Repository default branch (fallback):** If no stacked base is found, queries the GitHub REST API for the repository's default branch (fallback: `origin/HEAD` symbolic ref).
+
+If both detection methods fail, the command exits with an error.
 
 Hints if detection fails:
 
@@ -99,7 +107,7 @@ If no config file is found and `stdin` is a TTY, `gh ultrahope pr suggest` will 
 
 ```bash
 export ULTRAHOPE_LLM_API_KEY="..."
-gh ultrahope pr suggest --debug
+gh ultrahope pr suggest
 ```
 
 #### Claude (Anthropic Messages API)
@@ -145,4 +153,3 @@ export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="..."
 gh ultrahope pr suggest
 ```
-

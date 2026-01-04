@@ -2,11 +2,13 @@
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
   - Align `README.md` documentation with current implementation, especially the "Environment variables" section: provider/model/endpoint are configured via YAML config; only API key is required via env.
   - Enhance `gh ultrahope pr suggest` base selection to support stacked-branch workflows by auto-detecting a better base from `refs/remotes/origin/*` when base is omitted (fallback to repo default branch detection).
+  - Change `gh ultrahope pr suggest` default behavior: after confirmation, create a pull request by default; add `--dry-run` to only print the suggestion; remove `--create` option.
   - Switch config loading to ultrahope-owned global config path (XDG): `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback: `$HOME/.config/ultrahope/config.yml`); do not read `gh-dash` config.
   - Add `gh ultrahope config` subcommand that prints loaded config file path(s) and the effective merged file config to stdout.
   - Success criteria:
     - `go build` produces `gh-ultrahope`.
     - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, debug/secret-safe logging, LLM providers, PR creation flow) while improving base auto-detection for stacked branches.
+    - `gh ultrahope pr suggest` (no flags) prints suggestion then confirms and creates PR; `--dry-run` prints suggestion only.
     - CLI parsing uses `spf13/cobra` with command tree: `ultrahope` → `pr` → `suggest`.
     - `gh ultrahope config` prints the loaded config file list and merged YAML config.
 
@@ -44,13 +46,16 @@
   - Disabled Cobra default `completion` subcommand to keep help output minimal/GH-like.
   - Added `ultrahope pr` namespace command in `cmd/pr.go`.
   - Added `ultrahope pr suggest` Cobra command in `cmd/pr_suggest.go`, wiring flags/args into `internal/prsuggest`.
+  - Updated `cmd/pr_suggest.go`: removed `--create`; added `--dry-run/-n` to print only (no PR create). Default behavior is create-after-confirmation.
+  - Updated `internal/prsuggest/prsuggest.go`: removed `Options.Create`; now creates PR by default unless `Options.DryRun` is set (then skips confirmation + creation).
+  - Updated `README.md` usage/options/examples to reflect default PR creation and `--dry-run`; removed `--create` from docs.
   - Added `ultrahope config` Cobra command in `cmd/config.go` to print loaded config file paths and merged YAML to stdout.
   - `gh ultrahope config` annotates nil values inline in YAML output (e.g. `draft: null(default: false)`), instead of a separate "effective behavior" section.
   - README usage updated to mention `gh ultrahope config`.
   - Replaced root `main.go` with a Cobra bootstrap that exits with `cmd.Execute()` return code.
   - Removed obsolete root `config.go` (moved to `internal/prsuggest/config.go`).
   - README updated to new binary name and command path (`gh ultrahope pr suggest`).
-  - README documentation work in progress: aligning "Environment variables" + examples with implementation (provider/model/endpoint in YAML config; API key required via env).
+  - README documentation updated: "Environment variables" and "Examples" aligned with implementation (provider/model/endpoint in YAML config; API key required via env).
   - `go mod tidy` completed; direct deps now include `cobra` and `yaml.v3` (tidy’d).
   - Release workflow: unchanged (no `go_binary_name`).
 
@@ -58,13 +63,15 @@
   - Existing `gh-pr-suggest` implementation is functional; refactor to `ultrahope` is the active task.
   - Ran `gofmt` over `main.go`, `cmd/*.go`, `internal/prsuggest/*.go`.
   - Switched LLM env var names in `internal/prsuggest/prsuggest.go` to `ULTRAHOPE_*` only (no legacy fallback).
-  - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
+  - Updated `README.md` "Environment variables" + "Examples" to match implementation: provider/model/endpoint are configured via YAML config; API key required via `ULTRAHOPE_LLM_API_KEY` env; removed `ULTRAHOPE_LLM_PROVIDER/ENDPOINT/MODEL` from README.
+  - Updated `README.md` "Base branch default behavior" section to document stacked-branch detection (preferred) and repository default fallback.
+  - Implemented default PR creation for `gh ultrahope pr suggest` and added `--dry-run` (print-only); updated README; `gofmt` and `go test ./...` pass.
 
 - Now:
-  - Reconcile and update `README.md` "Environment variables" section to match implementation (config-driven provider/model/endpoint; env required only for API key).
+  - `pr suggest` default create behavior + `--dry-run` are implemented; docs updated.
 
 - Next:
-  - Update `README.md` to reflect: `ULTRAHOPE_LLM_API_KEY` required; provider/model/endpoint described under config instead of env; keep only relevant non-secret env vars (`ULTRAHOPE_CONFIG`, `EDITOR`/`VISUAL`, `GH_REPO`).
+  - None.
 
 - Open questions (UNCONFIRMED if needed):
   - None.

@@ -47,7 +47,7 @@ type Options struct {
 	BaseBranch string
 	BaseGiven  bool
 	Edit       bool
-	Create     bool
+	DryRun     bool
 	Debug      bool
 }
 
@@ -205,28 +205,30 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 
 	fmt.Fprintln(out, outputText)
 
-	if opts.Create {
-		skipConfirm := loadedCfg.Config.Create.SkipConfirm != nil && *loadedCfg.Config.Create.SkipConfirm
-		draft := loadedCfg.Config.Create.Draft != nil && *loadedCfg.Config.Create.Draft
+	if opts.DryRun {
+		return ExitOK
+	}
 
-		title, body := parseSuggestedOutput(outputText)
-		if strings.TrimSpace(title) == "" {
-			fmt.Fprintln(errOut, "Failed to parse TITLE from suggested output.")
-			return ExitRuntimeErr
-		}
+	skipConfirm := loadedCfg.Config.Create.SkipConfirm != nil && *loadedCfg.Config.Create.SkipConfirm
+	draft := loadedCfg.Config.Create.Draft != nil && *loadedCfg.Config.Create.Draft
 
-		if !skipConfirm {
-			if !confirm(in, errOut, "Create pull request with this title/body? [y/N] ") {
-				return ExitOK
-			}
-		} else if opts.Debug {
-			fmt.Fprintln(errOut, "[debug] create.skip_confirm=true; skipping confirmation prompt")
-		}
+	title, body := parseSuggestedOutput(outputText)
+	if strings.TrimSpace(title) == "" {
+		fmt.Fprintln(errOut, "Failed to parse TITLE from suggested output.")
+		return ExitRuntimeErr
+	}
 
-		if err := createPullRequest(ctx, env, title, body, currentBranch, base.prBase, draft, opts.Debug, &sp, out, errOut); err != nil {
-			fmt.Fprintln(errOut, err.Error())
-			return ExitRuntimeErr
+	if !skipConfirm {
+		if !confirm(in, errOut, "Create pull request with this title/body? [y/N] ") {
+			return ExitOK
 		}
+	} else if opts.Debug {
+		fmt.Fprintln(errOut, "[debug] create.skip_confirm=true; skipping confirmation prompt")
+	}
+
+	if err := createPullRequest(ctx, env, title, body, currentBranch, base.prBase, draft, opts.Debug, &sp, out, errOut); err != nil {
+		fmt.Fprintln(errOut, err.Error())
+		return ExitRuntimeErr
 	}
 
 	return ExitOK
