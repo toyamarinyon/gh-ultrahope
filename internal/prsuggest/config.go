@@ -75,10 +75,10 @@ func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig
 	// Repo-level config files.
 	if repoRoot, err := gitRepoRoot(ctx); err == nil && repoRoot != "" {
 		candidates := []string{
-			filepath.Join(repoRoot, ".github", "gh-pr-suggest.yml"),
-			filepath.Join(repoRoot, ".github", "gh-pr-suggest.yaml"),
-			filepath.Join(repoRoot, ".gh-pr-suggest.yml"),
-			filepath.Join(repoRoot, ".gh-pr-suggest.yaml"),
+			filepath.Join(repoRoot, ".github", "ultrahope.yml"),
+			filepath.Join(repoRoot, ".github", "ultrahope.yaml"),
+			filepath.Join(repoRoot, ".ultrahope.yml"),
+			filepath.Join(repoRoot, ".ultrahope.yaml"),
 		}
 		for _, p := range candidates {
 			if cfg, ok, err := readYAMLConfigFileIfExists(p); err != nil {

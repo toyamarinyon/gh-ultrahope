@@ -66,6 +66,8 @@
   - Updated `README.md` "Environment variables" + "Examples" to match implementation: provider/model/endpoint are configured via YAML config; API key required via `ULTRAHOPE_LLM_API_KEY` env; removed `ULTRAHOPE_LLM_PROVIDER/ENDPOINT/MODEL` from README.
   - Updated `README.md` "Base branch default behavior" section to document stacked-branch detection (preferred) and repository default fallback.
   - Implemented default PR creation for `gh ultrahope pr suggest` and added `--dry-run` (print-only); updated README; `gofmt` and `go test ./...` pass.
+  - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
+  - Updated repo-level config candidate filenames in `internal/prsuggest/config.go` from `gh-pr-suggest` to `ultrahope`.
 
 - Now:
   - `pr suggest` default create behavior + `--dry-run` are implemented; docs updated.
