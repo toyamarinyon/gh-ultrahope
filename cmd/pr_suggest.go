@@ -21,7 +21,7 @@ func suggestArgs(cmd *cobra.Command, args []string) error {
 
 func init() {
 	var edit bool
-	var create bool
+	var dryRun bool
 	var debug bool
 
 	suggestCmd := &cobra.Command{
@@ -45,7 +45,7 @@ If detection fails, pass a base branch explicitly (e.g. "main") or set GH_REPO.`
 				BaseBranch: base,
 				BaseGiven:  baseGiven,
 				Edit:       edit,
-				Create:     create,
+				DryRun:     dryRun,
 				Debug:      debug,
 			}, os.Stdin, os.Stdout, os.Stderr)
 
@@ -57,7 +57,7 @@ If detection fails, pass a base branch explicitly (e.g. "main") or set GH_REPO.`
 	}
 
 	suggestCmd.Flags().BoolVarP(&edit, "edit", "e", false, "Edit the suggested output in $EDITOR")
-	suggestCmd.Flags().BoolVarP(&create, "create", "c", false, "Create PR with suggested title/body (with confirmation)")
+	suggestCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Print suggested title/body only (do not create PR)")
 	suggestCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Print extra debug info (never prints secrets)")
 
 	prCmd.AddCommand(suggestCmd)
