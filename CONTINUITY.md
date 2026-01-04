@@ -1,5 +1,6 @@
 - Goal (incl. success criteria):
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
+  - Align `README.md` documentation with current implementation, especially the "Environment variables" section: provider/model/endpoint are configured via YAML config; only API key is required via env.
   - Enhance `gh ultrahope pr suggest` base selection to support stacked-branch workflows by auto-detecting a better base from `refs/remotes/origin/*` when base is omitted (fallback to repo default branch detection).
   - Switch config loading to ultrahope-owned global config path (XDG): `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback: `$HOME/.config/ultrahope/config.yml`); do not read `gh-dash` config.
   - Add `gh ultrahope config` subcommand that prints loaded config file path(s) and the effective merged file config to stdout.
@@ -49,6 +50,7 @@
   - Replaced root `main.go` with a Cobra bootstrap that exits with `cmd.Execute()` return code.
   - Removed obsolete root `config.go` (moved to `internal/prsuggest/config.go`).
   - README updated to new binary name and command path (`gh ultrahope pr suggest`).
+  - README documentation work in progress: aligning "Environment variables" + examples with implementation (provider/model/endpoint in YAML config; API key required via env).
   - `go mod tidy` completed; direct deps now include `cobra` and `yaml.v3` (tidy’d).
   - Release workflow: unchanged (no `go_binary_name`).
 
@@ -59,10 +61,10 @@
   - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
 
 - Now:
-  - Implement `gh ultrahope config` subcommand that shows loaded config file path(s) and merged YAML.
+  - Reconcile and update `README.md` "Environment variables" section to match implementation (config-driven provider/model/endpoint; env required only for API key).
 
 - Next:
-  - Wire a `cmd/config.go` Cobra command under root; add a small exported helper in `internal/prsuggest` for loading config for display; run `go test ./...`.
+  - Update `README.md` to reflect: `ULTRAHOPE_LLM_API_KEY` required; provider/model/endpoint described under config instead of env; keep only relevant non-secret env vars (`ULTRAHOPE_CONFIG`, `EDITOR`/`VISUAL`, `GH_REPO`).
 
 - Open questions (UNCONFIRMED if needed):
   - None.

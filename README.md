@@ -52,22 +52,14 @@ Hints if detection fails:
 
 ### Environment variables
 
-- `ULTRAHOPE_LLM_PROVIDER` (optional): LLM API type (default: `minimax_anthropic`)
-  - `minimax_anthropic`: Anthropic Messages compatible (MiniMax endpoint by default)
-  - `anthropic`: Anthropic Messages compatible (Claude)
-  - `anthropic_compat`: Anthropic Messages compatible (custom endpoint)
-  - `openai_compat`: OpenAI Chat Completions compatible (custom endpoint)
-- `ULTRAHOPE_LLM_API_KEY` (required): API key (**never printed**)
-- `ULTRAHOPE_LLM_ENDPOINT` (optional): API endpoint override
-  - For `anthropic_compat`, set a **BASE URL** (the tool uses `BASE_URL + /v1/messages`)
-  - For `openai_compat`, set a **BASE URL that includes `/v1`** (the tool uses `BASE_URL + /chat/completions`)
-- `ULTRAHOPE_LLM_MODEL` (optional): model override
+- `ULTRAHOPE_LLM_API_KEY` (required): LLM API key (**never printed**)
+- `ULTRAHOPE_CONFIG` (optional): config file path override (`/path/to/config.yml`)
 - `EDITOR` / `VISUAL` (optional): editor used for `--edit` (default: `vim`)
 - `GH_REPO` (optional): `owner/repo` (if set, passed to `gh pr create --repo`)
 
 ### Configuration files (non-secret defaults)
 
-This tool keeps the **API key required via env var** (`ULTRAHOPE_LLM_API_KEY`), but supports YAML config files for non-secret defaults.
+This tool keeps the **API key required via env var** (`ULTRAHOPE_LLM_API_KEY`), but supports YAML config files for non-secret defaults such as **provider / endpoint / model** and PR creation defaults.
 
 **Search locations (later wins among config files):**
 
@@ -79,16 +71,18 @@ This tool keeps the **API key required via env var** (`ULTRAHOPE_LLM_API_KEY`), 
 
 **Precedence:**
 
-`env > repo config > global config > built-in defaults`
+- For non-secret settings (provider/model/endpoint, create options): `repo config > global config > built-in defaults`
+- `ULTRAHOPE_CONFIG` can override which config file is loaded
+- The API key is **env only**: `ULTRAHOPE_LLM_API_KEY`
 
 **Example (`config.yml`):**
 
 ```yaml
 llm:
-  provider: anthropic
-  model: claude-sonnet-4-5
-  # endpoint is optional; defaults per provider
-  # endpoint: https://api.anthropic.com/v1/messages
+  provider: minimax_anthropic # or: anthropic / anthropic_compat / openai_compat
+  model: MiniMax-M2.1         # defaults exist per provider; override as needed
+  # endpoint is optional; defaults per provider; set a base URL for compat providers
+  # endpoint: https://api.minimax.io/anthropic
 
 create:
   draft: true
@@ -111,32 +105,44 @@ gh ultrahope pr suggest --debug
 #### Claude (Anthropic Messages API)
 
 ```bash
-export ULTRAHOPE_LLM_PROVIDER="anthropic"
+cat > ./ultrahope.yml <<'YAML'
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-5
+YAML
+
+export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="$ANTHROPIC_API_KEY"
-export ULTRAHOPE_LLM_MODEL="claude-sonnet-4-5"
-# optional:
-# export ULTRAHOPE_LLM_ENDPOINT="https://api.anthropic.com/v1/messages"
 gh ultrahope pr suggest
 ```
 
 #### Claude-compatible (Anthropic Messages compatible)
 
 ```bash
-export ULTRAHOPE_LLM_PROVIDER="anthropic_compat"
+cat > ./ultrahope.yml <<'YAML'
+llm:
+  provider: anthropic_compat
+  endpoint: https://your-llm.example # base URL (the tool uses BASE_URL + /v1/messages)
+  model: ...
+YAML
+
+export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="..."
-export ULTRAHOPE_LLM_ENDPOINT="https://your-llm.example/v1/messages"
-export ULTRAHOPE_LLM_MODEL="..."
 gh ultrahope pr suggest
 ```
 
 #### OpenAI-compatible (Chat Completions)
 
 ```bash
-export ULTRAHOPE_LLM_PROVIDER="openai_compat"
+cat > ./ultrahope.yml <<'YAML'
+llm:
+  provider: openai_compat
+  endpoint: https://api.openai.com/v1 # base URL including /v1 (the tool uses BASE_URL + /chat/completions)
+  model: gpt-4o-mini
+YAML
+
+export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="..."
-# optional:
-# export ULTRAHOPE_LLM_ENDPOINT="https://api.openai.com/v1/chat/completions"
-export ULTRAHOPE_LLM_MODEL="gpt-4o-mini"
 gh ultrahope pr suggest
 ```
 
