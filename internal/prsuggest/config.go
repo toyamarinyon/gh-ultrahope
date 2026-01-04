@@ -47,8 +47,8 @@ func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig
 
 	// Global config path resolution:
 	// 1) ULTRAHOPE_CONFIG (already handled above)
-	// 2) XDG_CONFIG_HOME/gh-dash/config.yml
-	// 3) $HOME/.config/gh-dash/config.yml
+	// 2) XDG_CONFIG_HOME/ultrahope/config.yml
+	// 3) $HOME/.config/ultrahope/config.yml
 	if strings.TrimSpace(os.Getenv("ULTRAHOPE_CONFIG")) == "" {
 		if p := defaultGlobalConfigPath(); p != "" {
 			if cfg, ok, err := readYAMLConfigFileIfExists(p); err != nil {
@@ -91,10 +91,10 @@ func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig
 
 func defaultGlobalConfigPath() string {
 	if d := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); d != "" {
-		return filepath.Join(d, "gh-dash", "config.yml")
+		return filepath.Join(d, "ultrahope", "config.yml")
 	}
 	if h, err := os.UserHomeDir(); err == nil && strings.TrimSpace(h) != "" {
-		return filepath.Join(h, ".config", "gh-dash", "config.yml")
+		return filepath.Join(h, ".config", "ultrahope", "config.yml")
 	}
 	return ""
 }
@@ -167,8 +167,8 @@ func configCreationPath() (string, error) {
 	if p := strings.TrimSpace(os.Getenv("ULTRAHOPE_CONFIG")); p != "" {
 		return p, nil
 	}
-	// 2) XDG_CONFIG_HOME/gh-dash/config.yml
-	// 3) $HOME/.config/gh-dash/config.yml
+	// 2) XDG_CONFIG_HOME/ultrahope/config.yml
+	// 3) $HOME/.config/ultrahope/config.yml
 	p := defaultGlobalConfigPath()
 	if strings.TrimSpace(p) == "" {
 		return "", fmt.Errorf("could not determine a global config path")

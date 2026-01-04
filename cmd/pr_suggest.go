@@ -29,7 +29,8 @@ func init() {
 		Short: "Suggest a pull request title and body from git commits and diffs",
 		Long: `Suggest a pull request title and body from git commits and diffs.
 
-If base-branch is omitted, ultrahope will auto-detect the repository default branch.
+If base-branch is omitted, ultrahope will try to auto-detect a stacked base from origin/* refs,
+and if that fails it will fall back to the repository default branch.
 If detection fails, pass a base branch explicitly (e.g. "main") or set GH_REPO.`,
 		Args: suggestArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

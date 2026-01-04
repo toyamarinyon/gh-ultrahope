@@ -69,6 +69,11 @@ type Env struct {
 	GHRepo   string
 }
 
+type baseSelection struct {
+	prBase  string
+	gitBase string
+}
+
 func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -112,34 +117,48 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return ExitRuntimeErr
 	}
 
-	var baseBranch string
+	var base baseSelection
 	if opts.BaseGiven {
-		baseBranch = opts.BaseBranch
+		base = baseSelection{prBase: opts.BaseBranch, gitBase: opts.BaseBranch}
 	} else {
-		detected, err := detectDefaultBaseBranch(ctx, env)
-		if err != nil || strings.TrimSpace(detected) == "" {
-			if opts.Debug && err != nil {
-				fmt.Fprintf(errOut, "[debug] failed to detect default base branch: %s\n", err.Error())
+		if detected, ok, err := detectStackedBaseBranch(ctx, currentBranch); err != nil {
+			if opts.Debug {
+				fmt.Fprintf(errOut, "[debug] stacked base detection failed: %s\n", err.Error())
 			}
-			fmt.Fprintln(errOut, "Error: Unable to determine the repository default base branch.")
-			fmt.Fprintln(errOut, "Hint: Set GH_REPO=OWNER/REPO, or pass a base branch explicitly:")
-			fmt.Fprintln(errOut, "  gh ultrahope pr suggest main")
-			return ExitRuntimeErr
+		} else if ok {
+			base = detected
+			if opts.Debug {
+				fmt.Fprintf(errOut, "[debug] detected stacked base prBase=%s gitBase=%s\n", base.prBase, base.gitBase)
+			}
 		}
-		baseBranch = strings.TrimSpace(detected)
-		if opts.Debug {
-			fmt.Fprintf(errOut, "[debug] detected default base branch=%s\n", baseBranch)
+
+		if strings.TrimSpace(base.prBase) == "" || strings.TrimSpace(base.gitBase) == "" {
+			// Fall back to repository default branch detection.
+			detected, err := detectDefaultBaseBranch(ctx, env)
+			if err != nil || strings.TrimSpace(detected) == "" {
+				if opts.Debug && err != nil {
+					fmt.Fprintf(errOut, "[debug] failed to detect default base branch: %s\n", err.Error())
+				}
+				fmt.Fprintln(errOut, "Error: Unable to determine the repository default base branch.")
+				fmt.Fprintln(errOut, "Hint: Set GH_REPO=OWNER/REPO, or pass a base branch explicitly:")
+				fmt.Fprintln(errOut, "  gh ultrahope pr suggest main")
+				return ExitRuntimeErr
+			}
+			base = baseSelection{prBase: strings.TrimSpace(detected), gitBase: strings.TrimSpace(detected)}
+			if opts.Debug {
+				fmt.Fprintf(errOut, "[debug] detected default base branch=%s\n", base.prBase)
+			}
 		}
 	}
 
 	// Validate merge base exists.
-	if err := validateMergeBase(ctx, baseBranch); err != nil {
-		fmt.Fprintf(errOut, "Error: Cannot find merge base between '%s' and HEAD.\n", baseBranch)
+	if err := validateMergeBase(ctx, base.gitBase); err != nil {
+		fmt.Fprintf(errOut, "Error: Cannot find merge base between '%s' and HEAD.\n", base.gitBase)
 		fmt.Fprintln(errOut, "Make sure the base branch/commit exists.")
 		return ExitRuntimeErr
 	}
 
-	commitLog, err := getCommitLog(ctx, baseBranch, "HEAD")
+	commitLog, err := getCommitLog(ctx, base.gitBase, "HEAD")
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
@@ -150,23 +169,23 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return ExitRuntimeErr
 	}
 
-	diffSummary, err := getDiffSummary(ctx, baseBranch)
+	diffSummary, err := getDiffSummary(ctx, base.gitBase)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
-	detailedDiff, err := getDetailedDiff(ctx, baseBranch)
+	detailedDiff, err := getDetailedDiff(ctx, base.gitBase)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
-	changedFiles, err := getChangedFiles(ctx, baseBranch)
+	changedFiles, err := getChangedFiles(ctx, base.gitBase)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
 
-	prompt := buildPrompt(commitLog, diffSummary, detailedDiff, changedFiles, currentBranch, baseBranch)
+	prompt := buildPrompt(commitLog, diffSummary, detailedDiff, changedFiles, currentBranch, base.prBase)
 
 	suggested, err := callLLM(ctx, env, prompt, opts.Debug, &sp, errOut)
 	if err != nil {
@@ -204,13 +223,131 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 			fmt.Fprintln(errOut, "[debug] create.skip_confirm=true; skipping confirmation prompt")
 		}
 
-		if err := createPullRequest(ctx, env, title, body, currentBranch, baseBranch, draft, opts.Debug, &sp, out, errOut); err != nil {
+		if err := createPullRequest(ctx, env, title, body, currentBranch, base.prBase, draft, opts.Debug, &sp, out, errOut); err != nil {
 			fmt.Fprintln(errOut, err.Error())
 			return ExitRuntimeErr
 		}
 	}
 
 	return ExitOK
+}
+
+func detectStackedBaseBranch(ctx context.Context, currentBranch string) (baseSelection, bool, error) {
+	const maxCommits = 200
+
+	// Best-effort upstream detection; used only for exclusion.
+	upstream := ""
+	if s, err := runGit(ctx, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); err == nil {
+		upstream = strings.TrimSpace(s)
+	}
+
+	refOut, err := runGit(ctx, "for-each-ref", "--format", "%(objectname) %(refname:short)", "refs/remotes/origin")
+	if err != nil {
+		// No origin configured or other git error; treat as "not found" so we can fall back.
+		return baseSelection{}, false, nil
+	}
+
+	shaToBranches := parseRemoteRefTips(refOut)
+	if len(shaToBranches) == 0 {
+		return baseSelection{}, false, nil
+	}
+
+	revOut, err := runGit(ctx, "rev-list", "--max-count", fmt.Sprintf("%d", maxCommits), "HEAD")
+	if err != nil {
+		return baseSelection{}, false, err
+	}
+
+	commits := parseRevListOutput(revOut)
+	if len(commits) == 0 {
+		return baseSelection{}, false, nil
+	}
+
+	exclude := map[string]struct{}{
+		"origin/HEAD": {},
+	}
+	if strings.TrimSpace(upstream) != "" {
+		exclude[strings.TrimSpace(upstream)] = struct{}{}
+	}
+	if strings.TrimSpace(currentBranch) != "" {
+		exclude["origin/"+strings.TrimSpace(currentBranch)] = struct{}{}
+	}
+
+	prBase, gitBase, ok := selectStackedBase(commits, shaToBranches, exclude)
+	if !ok {
+		return baseSelection{}, false, nil
+	}
+	return baseSelection{prBase: prBase, gitBase: gitBase}, true, nil
+}
+
+func parseRemoteRefTips(out string) map[string][]string {
+	m := map[string][]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		sha := strings.TrimSpace(fields[0])
+		ref := strings.TrimSpace(fields[1])
+		if sha == "" || ref == "" {
+			continue
+		}
+		m[sha] = append(m[sha], ref)
+	}
+	for sha := range m {
+		sort.Strings(m[sha])
+	}
+	return m
+}
+
+func parseRevListOutput(out string) []string {
+	var commits []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			commits = append(commits, line)
+		}
+	}
+	return commits
+}
+
+func selectStackedBase(commits []string, shaToBranches map[string][]string, exclude map[string]struct{}) (prBase string, gitBase string, ok bool) {
+	for _, sha := range commits {
+		branches := shaToBranches[sha]
+		if len(branches) == 0 {
+			continue
+		}
+
+		candidates := make([]string, 0, len(branches))
+		for _, b := range branches {
+			if _, skip := exclude[b]; skip {
+				continue
+			}
+			// Keep only origin/*.
+			if !strings.HasPrefix(b, "origin/") {
+				continue
+			}
+			// Exclude origin/HEAD and any other HEAD-ish ref just in case.
+			if b == "origin/HEAD" || strings.HasSuffix(b, "/HEAD") {
+				continue
+			}
+			candidates = append(candidates, b)
+		}
+		if len(candidates) == 0 {
+			continue
+		}
+		sort.Strings(candidates)
+		gitBase = candidates[0]
+		prBase = strings.TrimPrefix(gitBase, "origin/")
+		if strings.TrimSpace(prBase) == "" {
+			continue
+		}
+		return prBase, gitBase, true
+	}
+	return "", "", false
 }
 
 func readEnv(fileCfg FileConfig) Env {

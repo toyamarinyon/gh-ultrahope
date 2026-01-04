@@ -1,9 +1,10 @@
 - Goal (incl. success criteria):
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
-  - Refactor the GitHub CLI extension from `gh-pr-suggest` into a Cobra-based suite invoked as `gh ultrahope pr suggest [base-branch]`.
+  - Enhance `gh ultrahope pr suggest` base selection to support stacked-branch workflows by auto-detecting a better base from `refs/remotes/origin/*` when base is omitted (fallback to repo default branch detection).
+  - Switch config loading to ultrahope-owned global config path (XDG): `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback: `$HOME/.config/ultrahope/config.yml`); do not read `gh-dash` config.
   - Success criteria:
     - `go build` produces `gh-ultrahope`.
-    - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, base branch auto-detection, debug/secret-safe logging, LLM providers, PR creation flow).
+    - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, debug/secret-safe logging, LLM providers, PR creation flow) while improving base auto-detection for stacked branches.
     - CLI parsing uses `spf13/cobra` with command tree: `ultrahope` → `pr` → `suggest`.
 
 - Constraints/Assumptions:
@@ -17,6 +18,8 @@
   - Extract existing `run()` logic into `internal/prsuggest` so Cobra handlers are thin glue.
   - Map CLI errors to existing exit codes (0/1/2/130) as closely as practical with Cobra.
   - Release workflow will NOT set `go_binary_name` (keep relying on default behavior); user may adjust later if needed.
+  - Base auto-detect (when base omitted): try stacked-base detection via `origin/*` refs first; if not found, fall back to repo default branch detection.
+  - Config loading: stop reading `$XDG_CONFIG_HOME/gh-dash/config.yml` / `$HOME/.config/gh-dash/config.yml`; use `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` instead. No fallback to `gh-dash`.
 
 - State:
   - Repo: `/Users/satoshi/repo/toyamarinyon/gh-pr-suggest` (git repo; will become ultrahope naming).
@@ -27,6 +30,12 @@
   - Extracted existing implementation into `internal/prsuggest/prsuggest.go` (new package entrypoint: `prsuggest.Run(opts, in, out, errOut)`).
   - Moved config loader/schema into `internal/prsuggest/config.go` (preserves current file locations/precedence).
   - Env vars use `ULTRAHOPE_*` only.
+  - Base branch auto-detect enhancement in progress: when base omitted, will prefer stacked base from `refs/remotes/origin/*` (as git ref `origin/<branch>`) and use `<branch>` for PR base; fallback remains repo default branch detection.
+  - Global config path updated to `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback `$HOME/.config/ultrahope/config.yml`) in `internal/prsuggest/config.go`.
+  - README config docs updated to describe `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` (no `gh-dash` path).
+  - CLI help text updated to describe stacked base detection behavior.
+  - Added unit tests for stacked base parsing/selection in `internal/prsuggest/stacked_base_test.go`.
+  - Ran `gofmt` on touched Go files and `go test ./...` (passes).
   - Added Cobra root command scaffold in `cmd/root.go` with exit-code mapping.
   - Disabled Cobra default `completion` subcommand to keep help output minimal/GH-like.
   - Added `ultrahope pr` namespace command in `cmd/pr.go`.
@@ -44,10 +53,10 @@
   - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
 
 - Now:
-  - Refactor completed; only optional workflow/repo-rename polish remains outside this session.
+  - Update config loading docs/behavior to use `ultrahope/config.yml` instead of `gh-dash/config.yml`; then verify via tests/debug output.
 
 - Next:
-  - Optional (user-owned): rename GitHub repo to `gh-ultrahope` and verify release workflow artifact naming still matches GitHub CLI extension requirements.
+  - Update `README.md` config section to match new global path; run `go test ./...`.
 
 - Open questions (UNCONFIRMED if needed):
   - None.

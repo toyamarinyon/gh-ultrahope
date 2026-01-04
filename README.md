@@ -71,8 +71,8 @@ This tool keeps the **API key required via env var** (`ULTRAHOPE_LLM_API_KEY`), 
 **Search locations (later wins among config files):**
 
 - Global:
-  - If `XDG_CONFIG_HOME` is set: `$XDG_CONFIG_HOME/gh-dash/config.yml`
-  - Else: `$HOME/.config/gh-dash/config.yml`
+  - If `XDG_CONFIG_HOME` is set: `$XDG_CONFIG_HOME/ultrahope/config.yml`
+  - Else: `$HOME/.config/ultrahope/config.yml`
 - Repo: `.github/gh-pr-suggest.yml` (or `.yaml`), or `.gh-pr-suggest.yml` (or `.yaml`)
 - Optional override: set `ULTRAHOPE_CONFIG=/path/to/config.yml`
 
