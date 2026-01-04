@@ -15,6 +15,18 @@ Maintain a single Continuity Ledger for this workspace in `CONTINUITY.md`. The l
 ### In replies
 - Begin with a brief “Ledger Snapshot” (Goal + Now/Next + Open Questions). Print the full ledger only when it materially changes or when the user asks.
 
+### `CONTINUITY.md` format (keep headings)
+- Goal (incl. success criteria):
+- Constraints/Assumptions:
+- Key decisions:
+- State:
+- Done:
+- Now:
+- Next:
+- Open questions (UNCONFIRMED if needed):
+- Working set (files/ids/commands):
+
+
 ## Development flow (Go build cache workaround)
 
 Some execution environments (e.g. Cursor sandbox) cannot write to Go’s default build cache location (macOS example: `~/Library/Caches/go-build`). In that case, Go commands may fail with errors like:
@@ -27,14 +39,3 @@ Workaround: use repository-local cache/temp directories by setting `GOCACHE` and
 GOCACHE="$PWD/.gocache" GOTMPDIR="$PWD/.gotmp" go test ./...
 GOCACHE="$PWD/.gocache" GOTMPDIR="$PWD/.gotmp" go run . --help
 ```
-
-### `CONTINUITY.md` format (keep headings)
-- Goal (incl. success criteria):
-- Constraints/Assumptions:
-- Key decisions:
-- State:
-- Done:
-- Now:
-- Next:
-- Open questions (UNCONFIRMED if needed):
-- Working set (files/ids/commands):
