@@ -2,10 +2,12 @@
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
   - Enhance `gh ultrahope pr suggest` base selection to support stacked-branch workflows by auto-detecting a better base from `refs/remotes/origin/*` when base is omitted (fallback to repo default branch detection).
   - Switch config loading to ultrahope-owned global config path (XDG): `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback: `$HOME/.config/ultrahope/config.yml`); do not read `gh-dash` config.
+  - Add `gh ultrahope config` subcommand that prints loaded config file path(s) and the effective merged file config to stdout.
   - Success criteria:
     - `go build` produces `gh-ultrahope`.
     - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, debug/secret-safe logging, LLM providers, PR creation flow) while improving base auto-detection for stacked branches.
     - CLI parsing uses `spf13/cobra` with command tree: `ultrahope` → `pr` → `suggest`.
+    - `gh ultrahope config` prints the loaded config file list and merged YAML config.
 
 - Constraints/Assumptions:
   - Do not rewrite business logic; change primarily CLI structure/command parsing/naming.
@@ -32,6 +34,7 @@
   - Env vars use `ULTRAHOPE_*` only.
   - Base branch auto-detect enhancement in progress: when base omitted, will prefer stacked base from `refs/remotes/origin/*` (as git ref `origin/<branch>`) and use `<branch>` for PR base; fallback remains repo default branch detection.
   - Global config path updated to `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback `$HOME/.config/ultrahope/config.yml`) in `internal/prsuggest/config.go`.
+  - `internal/prsuggest.LoadFileConfig(ctx)` added for `gh ultrahope config` to display merged file config and loaded file paths (env vars not applied).
   - README config docs updated to describe `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` (no `gh-dash` path).
   - CLI help text updated to describe stacked base detection behavior.
   - Added unit tests for stacked base parsing/selection in `internal/prsuggest/stacked_base_test.go`.
@@ -40,6 +43,9 @@
   - Disabled Cobra default `completion` subcommand to keep help output minimal/GH-like.
   - Added `ultrahope pr` namespace command in `cmd/pr.go`.
   - Added `ultrahope pr suggest` Cobra command in `cmd/pr_suggest.go`, wiring flags/args into `internal/prsuggest`.
+  - Added `ultrahope config` Cobra command in `cmd/config.go` to print loaded config file paths and merged YAML to stdout.
+  - `gh ultrahope config` annotates nil values inline in YAML output (e.g. `draft: null(default: false)`), instead of a separate "effective behavior" section.
+  - README usage updated to mention `gh ultrahope config`.
   - Replaced root `main.go` with a Cobra bootstrap that exits with `cmd.Execute()` return code.
   - Removed obsolete root `config.go` (moved to `internal/prsuggest/config.go`).
   - README updated to new binary name and command path (`gh ultrahope pr suggest`).
@@ -53,15 +59,15 @@
   - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
 
 - Now:
-  - Update config loading docs/behavior to use `ultrahope/config.yml` instead of `gh-dash/config.yml`; then verify via tests/debug output.
+  - Implement `gh ultrahope config` subcommand that shows loaded config file path(s) and merged YAML.
 
 - Next:
-  - Update `README.md` config section to match new global path; run `go test ./...`.
+  - Wire a `cmd/config.go` Cobra command under root; add a small exported helper in `internal/prsuggest` for loading config for display; run `go test ./...`.
 
 - Open questions (UNCONFIRMED if needed):
   - None.
 
 - Working set (files/ids/commands):
-  - `main.go`, `config.go`
+  - `main.go`, `cmd/config.go`
   - `cmd/root.go`, `cmd/pr.go`, `cmd/pr_suggest.go`
   - `internal/prsuggest/*`

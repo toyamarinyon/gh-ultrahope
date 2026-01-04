@@ -31,6 +31,7 @@ gh extension install .
 gh ultrahope pr suggest [base-branch]
 gh ultrahope pr suggest main --edit
 gh ultrahope pr suggest main --create
+gh ultrahope config
 ```
 
 ### Options

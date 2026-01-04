@@ -32,6 +32,18 @@ type loadedConfig struct {
 	Sources []string
 }
 
+// LoadFileConfig loads YAML configuration files (global/repo/override) and returns
+// the merged config plus the list of loaded file paths in load order.
+//
+// Note: environment variables are NOT applied here; this function reflects file config only.
+func LoadFileConfig(ctx context.Context) (cfg FileConfig, sources []string, err error) {
+	loaded, err := loadConfig(ctx, false, nil)
+	if err != nil {
+		return FileConfig{}, nil, err
+	}
+	return loaded.Config, loaded.Sources, nil
+}
+
 func loadConfig(ctx context.Context, debug bool, errOut io.Writer) (loadedConfig, error) {
 	var out loadedConfig
 
