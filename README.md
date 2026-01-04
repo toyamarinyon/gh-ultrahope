@@ -2,7 +2,7 @@
 
 AI-powered GitHub workflow assistant.
 
-This repository currently ships the `ultrahope pr suggest` command, which suggests a pull request title and body from git commits and diffs using an LLM API.
+This repository currently ships the `ultrahope pr create` command, which creates a pull request with an AI-generated title and body from git commits and diffs using an LLM API.
 
 This repository is a **GitHub CLI extension**. The executable is `gh-ultrahope` and it is invoked as:
 
@@ -28,25 +28,25 @@ gh extension install .
 ## Usage
 
 ```bash
-gh ultrahope pr suggest [base-branch]
-gh ultrahope pr suggest main --edit
-gh ultrahope pr suggest main --dry-run
+gh ultrahope pr create [base-branch]
+gh ultrahope pr create main --edit
+gh ultrahope pr create main --dry-run
 gh ultrahope config
 ```
 
-By default, `gh ultrahope pr suggest` prints the suggested title/body, then asks for confirmation and creates a pull request.
+By default, `gh ultrahope pr create` prints the suggested title/body, then asks for confirmation and creates a pull request.
 Use `--dry-run` to only print the suggestion (no confirmation prompt, no PR creation).
 
 ### Options
 
-- `--edit`, `-e`: edit the suggested output in `$EDITOR` before printing
+- `--edit`, `-e`: edit the generated output in `$EDITOR` before printing
 - `--dry-run`, `-n`: print suggested title/body only (do not create PR)
 - `--debug`, `-d`: print extra debug info (never prints secrets)
 - `--help`, `-h`: show help
 
 ### Base branch default behavior
 
-If you omit `base-branch`, `gh ultrahope pr suggest` will auto-detect the base branch using a two-step process:
+If you omit `base-branch`, `gh ultrahope pr create` will auto-detect the base branch using a two-step process:
 
 1. **Stacked branch detection (preferred):** Walks up to 200 commits from HEAD to find the first commit that has a remote tracking branch (`origin/*`) pointing to it. This enables seamless workflows with stacked PRs—if you're on `feature-b` which branches off `feature-a`, it will automatically detect `feature-a` as the base, not the repo default branch.
 2. **Repository default branch (fallback):** If no stacked base is found, queries the GitHub REST API for the repository's default branch (fallback: `origin/HEAD` symbolic ref).
@@ -56,7 +56,7 @@ If both detection methods fail, the command exits with an error.
 Hints if detection fails:
 
 - Set `GH_REPO=OWNER/REPO`
-- Or pass a base branch explicitly: `gh ultrahope pr suggest main`
+- Or pass a base branch explicitly: `gh ultrahope pr create main`
 
 ### Environment variables
 
@@ -74,7 +74,7 @@ This tool keeps the **API key required via env var** (`ULTRAHOPE_LLM_API_KEY`), 
 - Global:
   - If `XDG_CONFIG_HOME` is set: `$XDG_CONFIG_HOME/ultrahope/config.yml`
   - Else: `$HOME/.config/ultrahope/config.yml`
-- Repo: `.github/gh-pr-suggest.yml` (or `.yaml`), or `.gh-pr-suggest.yml` (or `.yaml`)
+- Repo: `.github/ultrahope.yml` (or `.yaml`), or `.ultrahope.yml` (or `.yaml`)
 - Optional override: set `ULTRAHOPE_CONFIG=/path/to/config.yml`
 
 **Precedence:**
@@ -99,7 +99,7 @@ create:
 
 ### Auto-init wizard (TTY only)
 
-If no config file is found and `stdin` is a TTY, `gh ultrahope pr suggest` will start an **English interactive wizard** and create the global config file for you.
+If no config file is found and `stdin` is a TTY, `gh ultrahope pr create` will start an **English interactive wizard** and create the global config file for you.
 
 ### Examples
 
@@ -107,7 +107,7 @@ If no config file is found and `stdin` is a TTY, `gh ultrahope pr suggest` will 
 
 ```bash
 export ULTRAHOPE_LLM_API_KEY="..."
-gh ultrahope pr suggest
+gh ultrahope pr create
 ```
 
 #### Claude (Anthropic Messages API)
@@ -121,7 +121,7 @@ YAML
 
 export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="$ANTHROPIC_API_KEY"
-gh ultrahope pr suggest
+gh ultrahope pr create
 ```
 
 #### Claude-compatible (Anthropic Messages compatible)
@@ -136,7 +136,7 @@ YAML
 
 export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="..."
-gh ultrahope pr suggest
+gh ultrahope pr create
 ```
 
 #### OpenAI-compatible (Chat Completions)
@@ -151,5 +151,5 @@ YAML
 
 export ULTRAHOPE_CONFIG="$PWD/ultrahope.yml"
 export ULTRAHOPE_LLM_API_KEY="..."
-gh ultrahope pr suggest
+gh ultrahope pr create
 ```

@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/toyamarinyon/gh-ultrahope/internal/prsuggest"
+	"github.com/toyamarinyon/gh-ultrahope/internal/prcreate"
 )
 
 var rootCmd = &cobra.Command{
@@ -41,7 +41,7 @@ func (e *exitError) Error() string {
 func Execute() int {
 	err := rootCmd.Execute()
 	if err == nil {
-		return prsuggest.ExitOK
+		return prcreate.ExitOK
 	}
 
 	var ee *exitError
@@ -55,10 +55,10 @@ func Execute() int {
 		if ee.code != 0 {
 			return ee.code
 		}
-		return prsuggest.ExitRuntimeErr
+		return prcreate.ExitRuntimeErr
 	}
 
 	// Cobra usage/validation errors (unknown command, too many args, etc).
 	fmt.Fprintln(os.Stderr, err.Error())
-	return prsuggest.ExitInvalidArgs
+	return prcreate.ExitInvalidArgs
 }

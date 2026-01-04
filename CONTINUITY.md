@@ -5,6 +5,7 @@
   - Change `gh ultrahope pr suggest` default behavior: after confirmation, create a pull request by default; add `--dry-run` to only print the suggestion; remove `--create` option.
   - Switch config loading to ultrahope-owned global config path (XDG): `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback: `$HOME/.config/ultrahope/config.yml`); do not read `gh-dash` config.
   - Add `gh ultrahope config` subcommand that prints loaded config file path(s) and the effective merged file config to stdout.
+  - Align CLI naming with `gh pr`: rename `gh ultrahope pr suggest` to `gh ultrahope pr create` (no alias; breaking change). Ensure `gh ultrahope pr` shows help.
   - Success criteria:
     - `go build` produces `gh-ultrahope`.
     - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, debug/secret-safe logging, LLM providers, PR creation flow) while improving base auto-detection for stacked branches.
@@ -20,7 +21,7 @@
 
 - Key decisions:
   - Switch env var prefix from `GH_PR_SUGGEST_*` to `ULTRAHOPE_*` (brand unification). No backward compatibility.
-  - Extract existing `run()` logic into `internal/prsuggest` so Cobra handlers are thin glue.
+  - Extract existing `run()` logic into `internal/prcreate` so Cobra handlers are thin glue.
   - Map CLI errors to existing exit codes (0/1/2/130) as closely as practical with Cobra.
   - Release workflow will NOT set `go_binary_name` (keep relying on default behavior); user may adjust later if needed.
   - Base auto-detect (when base omitted): try stacked-base detection via `origin/*` refs first; if not found, fall back to repo default branch detection.
@@ -29,56 +30,62 @@
 - State:
   - Repo: `/Users/satoshi/repo/toyamarinyon/gh-pr-suggest` (git repo; will become ultrahope naming).
   - Current implementation: single `main.go` with manual parsing and rich logic (LLM/config/PR create).
-  - Command target: `gh ultrahope pr suggest [base-branch]` implemented via Cobra.
+  - Command target: `gh ultrahope pr create [base-branch]` implemented via Cobra.
   - Go module path updated to `github.com/toyamarinyon/gh-ultrahope`.
   - Added Cobra dependency (`github.com/spf13/cobra`) via `go get`; `go.mod`/`go.sum` updated.
-  - Extracted existing implementation into `internal/prsuggest/prsuggest.go` (new package entrypoint: `prsuggest.Run(opts, in, out, errOut)`).
-  - Moved config loader/schema into `internal/prsuggest/config.go` (preserves current file locations/precedence).
+  - Extracted existing implementation into `internal/prcreate/pr_create.go` (new package entrypoint: `prcreate.Run(opts, in, out, errOut)`).
+  - Moved config loader/schema into `internal/prcreate/config.go` (preserves current file locations/precedence).
   - Env vars use `ULTRAHOPE_*` only.
   - Base branch auto-detect enhancement in progress: when base omitted, will prefer stacked base from `refs/remotes/origin/*` (as git ref `origin/<branch>`) and use `<branch>` for PR base; fallback remains repo default branch detection.
-  - Global config path updated to `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback `$HOME/.config/ultrahope/config.yml`) in `internal/prsuggest/config.go`.
-  - `internal/prsuggest.LoadFileConfig(ctx)` added for `gh ultrahope config` to display merged file config and loaded file paths (env vars not applied).
+  - Global config path updated to `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback `$HOME/.config/ultrahope/config.yml`) in `internal/prcreate/config.go`.
+  - `internal/prcreate.LoadFileConfig(ctx)` added for `gh ultrahope config` to display merged file config and loaded file paths (env vars not applied).
   - README config docs updated to describe `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` (no `gh-dash` path).
   - CLI help text updated to describe stacked base detection behavior.
-  - Added unit tests for stacked base parsing/selection in `internal/prsuggest/stacked_base_test.go`.
+  - Added unit tests for stacked base parsing/selection in `internal/prcreate/stacked_base_test.go`.
   - Ran `gofmt` on touched Go files and `go test ./...` (passes).
   - Added Cobra root command scaffold in `cmd/root.go` with exit-code mapping.
   - Disabled Cobra default `completion` subcommand to keep help output minimal/GH-like.
   - Added `ultrahope pr` namespace command in `cmd/pr.go`.
-  - Added `ultrahope pr suggest` Cobra command in `cmd/pr_suggest.go`, wiring flags/args into `internal/prsuggest`.
-  - Updated `cmd/pr_suggest.go`: removed `--create`; added `--dry-run/-n` to print only (no PR create). Default behavior is create-after-confirmation.
-  - Updated `internal/prsuggest/prsuggest.go`: removed `Options.Create`; now creates PR by default unless `Options.DryRun` is set (then skips confirmation + creation).
+  - Added `ultrahope pr create` Cobra command in `cmd/pr_create.go`, wiring flags/args into `internal/prcreate`.
+  - Updated `cmd/pr_create.go`: removed `--create`; added `--dry-run/-n` to print only (no PR create). Default behavior is create-after-confirmation.
+  - Updated `internal/prcreate/pr_create.go`: removed `Options.Create`; now creates PR by default unless `Options.DryRun` is set (then skips confirmation + creation).
   - Updated `README.md` usage/options/examples to reflect default PR creation and `--dry-run`; removed `--create` from docs.
   - Added `ultrahope config` Cobra command in `cmd/config.go` to print loaded config file paths and merged YAML to stdout.
   - `gh ultrahope config` annotates nil values inline in YAML output (e.g. `draft: null(default: false)`), instead of a separate "effective behavior" section.
   - README usage updated to mention `gh ultrahope config`.
   - Replaced root `main.go` with a Cobra bootstrap that exits with `cmd.Execute()` return code.
-  - Removed obsolete root `config.go` (moved to `internal/prsuggest/config.go`).
-  - README updated to new binary name and command path (`gh ultrahope pr suggest`).
+  - Removed obsolete root `config.go` (moved to `internal/prcreate/config.go`).
+  - README updated to new binary name and command path (`gh ultrahope pr create`).
   - README documentation updated: "Environment variables" and "Examples" aligned with implementation (provider/model/endpoint in YAML config; API key required via env).
   - `go mod tidy` completed; direct deps now include `cobra` and `yaml.v3` (tidy’d).
   - Release workflow: unchanged (no `go_binary_name`).
 
 - Done:
   - Existing `gh-pr-suggest` implementation is functional; refactor to `ultrahope` is the active task.
-  - Ran `gofmt` over `main.go`, `cmd/*.go`, `internal/prsuggest/*.go`.
-  - Switched LLM env var names in `internal/prsuggest/prsuggest.go` to `ULTRAHOPE_*` only (no legacy fallback).
+  - Ran `gofmt` over `main.go`, `cmd/*.go`, `internal/prcreate/*.go`.
+  - Switched LLM env var names in `internal/prcreate/pr_create.go` to `ULTRAHOPE_*` only (no legacy fallback).
   - Updated `README.md` "Environment variables" + "Examples" to match implementation: provider/model/endpoint are configured via YAML config; API key required via `ULTRAHOPE_LLM_API_KEY` env; removed `ULTRAHOPE_LLM_PROVIDER/ENDPOINT/MODEL` from README.
   - Updated `README.md` "Base branch default behavior" section to document stacked-branch detection (preferred) and repository default fallback.
-  - Implemented default PR creation for `gh ultrahope pr suggest` and added `--dry-run` (print-only); updated README; `gofmt` and `go test ./...` pass.
+  - Implemented default PR creation for `gh ultrahope pr create` and added `--dry-run` (print-only); updated README; `gofmt` and `go test ./...` pass.
   - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
-  - Updated repo-level config candidate filenames in `internal/prsuggest/config.go` from `gh-pr-suggest` to `ultrahope`.
+  - Updated repo-level config candidate filenames in `internal/prcreate/config.go` from `gh-pr-suggest` to `ultrahope`.
 
 - Now:
-  - `pr suggest` default create behavior + `--dry-run` are implemented; docs updated.
+  - Renaming CLI surface from `pr suggest` to `pr create` (no alias).
+  - Renaming internal package and filenames from `prsuggest` to `prcreate` to avoid confusion (dir + files).
+  - Polishing remaining `suggest` wording in code/help output.
 
 - Next:
-  - None.
+  - Update Cobra command wiring to expose `pr create` and remove `pr suggest`. (done)
+  - Update user-facing strings + README references from `pr suggest` to `pr create`. (done)
+  - Run `go test ./...` to confirm behavior. (done)
+  - Polish remaining `suggest` wording in help/output. (done)
 
 - Open questions (UNCONFIRMED if needed):
   - None.
 
 - Working set (files/ids/commands):
   - `main.go`, `cmd/config.go`
-  - `cmd/root.go`, `cmd/pr.go`, `cmd/pr_suggest.go`
-  - `internal/prsuggest/*`
+  - `cmd/root.go`, `cmd/pr.go`
+  - `cmd/pr_create.go`
+  - `internal/prcreate/*`

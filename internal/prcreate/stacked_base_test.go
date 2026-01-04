@@ -1,4 +1,4 @@
-package prsuggest
+package prcreate
 
 import "testing"
 

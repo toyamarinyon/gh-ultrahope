@@ -1,4 +1,4 @@
-package prsuggest
+package prcreate
 
 import (
 	"bufio"
@@ -102,7 +102,7 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 
 	env := readEnv(loadedCfg.Config)
 	if strings.TrimSpace(env.APIKey) == "" {
-		fmt.Fprintln(errOut, "ULTRAHOPE_LLM_API_KEY is not set, so `gh ultrahope pr suggest` cannot run. Please set it:")
+		fmt.Fprintln(errOut, "ULTRAHOPE_LLM_API_KEY is not set, so `gh ultrahope pr create` cannot run. Please set it:")
 		fmt.Fprintln(errOut, "export ULTRAHOPE_LLM_API_KEY=YOUR_LLM_API_KEY")
 		return ExitRuntimeErr
 	}
@@ -141,7 +141,7 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 				}
 				fmt.Fprintln(errOut, "Error: Unable to determine the repository default base branch.")
 				fmt.Fprintln(errOut, "Hint: Set GH_REPO=OWNER/REPO, or pass a base branch explicitly:")
-				fmt.Fprintln(errOut, "  gh ultrahope pr suggest main")
+				fmt.Fprintln(errOut, "  gh ultrahope pr create main")
 				return ExitRuntimeErr
 			}
 			base = baseSelection{prBase: strings.TrimSpace(detected), gitBase: strings.TrimSpace(detected)}
@@ -214,7 +214,7 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 
 	title, body := parseSuggestedOutput(outputText)
 	if strings.TrimSpace(title) == "" {
-		fmt.Fprintln(errOut, "Failed to parse TITLE from suggested output.")
+		fmt.Fprintln(errOut, "Failed to parse TITLE from generated output.")
 		return ExitRuntimeErr
 	}
 
@@ -1217,7 +1217,7 @@ func parseSuggestedOutput(output string) (title string, body string) {
 
 func editInEditor(content string, editor string) (string, error) {
 	tmpDir := os.TempDir()
-	f, err := os.CreateTemp(tmpDir, "gh-suggest-pr-*.txt")
+	f, err := os.CreateTemp(tmpDir, "gh-ultrahope-pr-*.txt")
 	if err != nil {
 		return "", err
 	}
@@ -1288,7 +1288,7 @@ const wizardDocURL = "https://github.com/toyamarinyon/gh-ultrahope#configuration
 func runInitWizard(in io.Reader, errOut io.Writer) error {
 	r := bufio.NewReader(in)
 
-	fmt.Fprintln(errOut, "We'll start configuring the ultrahope PR suggest extension.")
+	fmt.Fprintln(errOut, "We'll start configuring the ultrahope PR create extension.")
 	fmt.Fprintln(errOut, "")
 	fmt.Fprintln(errOut, "Select LLM API:")
 	fmt.Fprintln(errOut, "  1) OpenAI")

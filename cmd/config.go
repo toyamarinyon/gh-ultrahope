@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/toyamarinyon/gh-ultrahope/internal/prsuggest"
+	"github.com/toyamarinyon/gh-ultrahope/internal/prcreate"
 )
 
 func init() {
@@ -22,9 +22,9 @@ func init() {
 			_ = args
 			cmd.SilenceUsage = true
 
-			cfg, sources, err := prsuggest.LoadFileConfig(context.Background())
+			cfg, sources, err := prcreate.LoadFileConfig(context.Background())
 			if err != nil {
-				return &exitError{code: prsuggest.ExitRuntimeErr, cause: err}
+				return &exitError{code: prcreate.ExitRuntimeErr, cause: err}
 			}
 
 			fmt.Fprintln(os.Stdout, "config files:")
@@ -42,7 +42,7 @@ func init() {
 
 			b, err := yaml.Marshal(cfg)
 			if err != nil {
-				return &exitError{code: prsuggest.ExitRuntimeErr, cause: err}
+				return &exitError{code: prcreate.ExitRuntimeErr, cause: err}
 			}
 
 			fmt.Fprintln(os.Stdout, "")
@@ -73,7 +73,7 @@ func init() {
 				fmt.Fprintln(os.Stdout, line)
 			}
 			if err := sc.Err(); err != nil {
-				return &exitError{code: prsuggest.ExitRuntimeErr, cause: fmt.Errorf("failed to format config output: %w", err)}
+				return &exitError{code: prcreate.ExitRuntimeErr, cause: fmt.Errorf("failed to format config output: %w", err)}
 			}
 			return nil
 		},
