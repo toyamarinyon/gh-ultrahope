@@ -1,0 +1,12 @@
+[tasks.build]
+description = "Build gh-ultrahope binary (for local gh extension install)"
+run = "go build -o gh-ultrahope ."
+
+[tasks.uninstall]
+description = "Uninstall local gh extension"
+run = "gh extension remove ultrahope"
+
+[tasks.install]
+description = "Install local gh extension"
+depends = ["build", "uninstall"]
+run = "gh extension install ."

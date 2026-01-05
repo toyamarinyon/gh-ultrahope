@@ -1,5 +1,6 @@
 - Goal (incl. success criteria):
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
+  - Add `mise` task(s) so local development install is one command: `mise run install` (build + uninstall + install).
   - Align `README.md` documentation with current implementation, especially the "Environment variables" section: provider/model/endpoint are configured via YAML config; only API key is required via env.
   - Enhance `gh ultrahope pr suggest` base selection to support stacked-branch workflows by auto-detecting a better base from `refs/remotes/origin/*` when base is omitted (fallback to repo default branch detection).
   - Change `gh ultrahope pr suggest` default behavior: after confirmation, create a pull request by default; add `--dry-run` to only print the suggestion; remove `--create` option.
@@ -70,6 +71,8 @@
   - Implemented default PR creation for `gh ultrahope pr create` and added `--dry-run` (print-only); updated README; `gofmt` and `go test ./...` pass.
   - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
   - Updated repo-level config candidate filenames in `internal/prcreate/config.go` from `gh-pr-suggest` to `ultrahope`.
+  - Added `mise.toml` tasks for local dev extension reinstall (`mise run install`: build + `gh extension remove ultrahope` + `gh extension install .`).
+  - Updated `README.md` to mention `mise run install` in local development install steps.
 
 - Now:
   - Renaming CLI surface from `pr suggest` to `pr create` (no alias).
@@ -91,3 +94,5 @@
   - `cmd/root.go`, `cmd/pr.go`
   - `cmd/pr_create.go`
   - `internal/prcreate/*`
+  - `mise.toml`
+  - `README.md`

@@ -21,6 +21,10 @@ gh extension install toyamarinyon/gh-ultrahope
 ### From local directory (development)
 
 ```bash
+# With mise (recommended)
+mise run install
+
+# Or manually
 go build -o gh-ultrahope .
 gh extension install .
 ```
