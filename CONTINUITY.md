@@ -6,6 +6,7 @@
   - Switch config loading to ultrahope-owned global config path (XDG): `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback: `$HOME/.config/ultrahope/config.yml`); do not read `gh-dash` config.
   - Add `gh ultrahope config` subcommand that prints loaded config file path(s) and the effective merged file config to stdout.
   - Align CLI naming with `gh pr`: rename `gh ultrahope pr suggest` to `gh ultrahope pr create` (no alias; breaking change). Ensure `gh ultrahope pr` shows help.
+  - When running `gh ultrahope pr create`, print the resolved base branch above generated TITLE/BODY output (always, whether base is provided or auto-detected).
   - Success criteria:
     - `go build` produces `gh-ultrahope`.
     - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, debug/secret-safe logging, LLM providers, PR creation flow) while improving base auto-detection for stacked branches.
@@ -74,6 +75,7 @@
   - Renaming CLI surface from `pr suggest` to `pr create` (no alias).
   - Renaming internal package and filenames from `prsuggest` to `prcreate` to avoid confusion (dir + files).
   - Polishing remaining `suggest` wording in code/help output.
+  - Add `Base branch: <branch>` line above generated output for `pr create`.
 
 - Next:
   - Update Cobra command wiring to expose `pr create` and remove `pr suggest`. (done)

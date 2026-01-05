@@ -193,7 +193,7 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return ExitRuntimeErr
 	}
 
-	outputText := suggested
+	outputText := fmt.Sprintf("Base branch: %s\n\n%s", strings.TrimSpace(base.prBase), suggested)
 	if opts.Edit {
 		edited, err := editInEditor(outputText, env.Editor)
 		if err != nil {
