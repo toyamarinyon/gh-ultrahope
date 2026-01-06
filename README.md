@@ -35,6 +35,7 @@ gh extension install .
 gh ultrahope pr create [base-branch]
 gh ultrahope pr create main --edit
 gh ultrahope pr create main --dry-run
+gh ultrahope pr create main --draft
 gh ultrahope config
 ```
 
@@ -45,6 +46,7 @@ Use `--dry-run` to only print the suggestion (no confirmation prompt, no PR crea
 
 - `--edit`, `-e`: edit the generated output in `$EDITOR` before printing
 - `--dry-run`, `-n`: print suggested title/body only (do not create PR)
+- `--draft`: mark pull request as a draft (overrides config `create.draft`; use `--draft=false` to force non-draft)
 - `--debug`, `-d`: print extra debug info (never prints secrets)
 - `--help`, `-h`: show help
 

@@ -163,3 +163,65 @@ func TestResolveBasesWithDeps_ExplicitBasePrefersOriginForDiffRef(t *testing.T) 
 		t.Fatalf("prBase: got %q", got.prBase)
 	}
 }
+
+func TestResolveBasesWithDeps_PrefersMainWhenMainTipIsMergeBaseEvenIfStackedDetected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	env := Env{GHRepo: "owner/repo"}
+	opts := Options{BaseGiven: false, Debug: false}
+
+	deps := baseResolutionDeps{
+		detectStackedBase: func(ctx context.Context, currentBranch string) (baseSelection, bool, error) {
+			// Simulate stacked-base detector choosing preview.
+			return baseSelection{prBase: "preview", gitBase: "origin/preview"}, true, nil
+		},
+		detectDefaultBase: func(ctx context.Context, env Env) (string, error) {
+			// Simulate GitHub default being preview; we still want main if main is the perfect ancestor base.
+			return "preview", nil
+		},
+		githubBranchExists: func(ctx context.Context, env Env, branch string) (bool, error) {
+			if branch != "main" {
+				t.Fatalf("unexpected branch: %q", branch)
+			}
+			return true, nil
+		},
+		preferOriginRef: func(ctx context.Context, branch string) string {
+			if branch == "main" {
+				return "origin/main"
+			}
+			return "origin/" + branch
+		},
+		validateMergeBase: func(ctx context.Context, base string) error {
+			return nil
+		},
+		gitRevParse: func(ctx context.Context, ref string) (string, error) {
+			switch ref {
+			case "origin/main", "main":
+				return "sha-main", nil
+			default:
+				return "sha-other", nil
+			}
+		},
+		gitMergeBase: func(ctx context.Context, base, head string) (string, error) {
+			if base == "origin/main" || base == "main" {
+				return "sha-main", nil
+			}
+			return "sha-mb", nil
+		},
+	}
+
+	got, err := resolveBasesWithDeps(ctx, env, opts, "feature", nil, deps)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.diffBaseLabel != "main" {
+		t.Fatalf("diffBaseLabel: got %q", got.diffBaseLabel)
+	}
+	if got.diffGitBase != "origin/main" {
+		t.Fatalf("diffGitBase: got %q", got.diffGitBase)
+	}
+	if got.prBase != "main" {
+		t.Fatalf("prBase: got %q", got.prBase)
+	}
+}

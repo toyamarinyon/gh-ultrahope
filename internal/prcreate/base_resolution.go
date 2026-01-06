@@ -24,6 +24,8 @@ type baseResolutionDeps struct {
 	githubBranchExists func(ctx context.Context, env Env, branch string) (bool, error)
 	preferOriginRef    func(ctx context.Context, branch string) string
 	validateMergeBase  func(ctx context.Context, base string) error
+	gitMergeBase       func(ctx context.Context, base, head string) (string, error)
+	gitRevParse        func(ctx context.Context, ref string) (string, error)
 }
 
 func defaultBaseDetectError() error {
@@ -37,8 +39,43 @@ func resolveBases(ctx context.Context, env Env, opts Options, currentBranch stri
 		githubBranchExists: githubBranchExists,
 		preferOriginRef:    preferOriginBranchRef,
 		validateMergeBase:  validateMergeBase,
+		gitMergeBase: func(ctx context.Context, base, head string) (string, error) {
+			out, err := runGit(ctx, "merge-base", base, head)
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(out), nil
+		},
+		gitRevParse: func(ctx context.Context, ref string) (string, error) {
+			out, err := runGit(ctx, "rev-parse", "--verify", ref)
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(out), nil
+		},
 	}
 	return resolveBasesWithDeps(ctx, env, opts, currentBranch, errOut, deps)
+}
+
+func isPerfectAncestorBase(ctx context.Context, baseRef string, deps baseResolutionDeps) bool {
+	baseRef = strings.TrimSpace(baseRef)
+	if baseRef == "" {
+		return false
+	}
+	if deps.gitRevParse == nil || deps.gitMergeBase == nil {
+		return false
+	}
+	baseSHA, err := deps.gitRevParse(ctx, baseRef)
+	if err != nil || strings.TrimSpace(baseSHA) == "" {
+		return false
+	}
+	mb, err := deps.gitMergeBase(ctx, baseRef, "HEAD")
+	if err != nil || strings.TrimSpace(mb) == "" {
+		return false
+	}
+	// If merge-base(base, HEAD) == tip(base), then HEAD is strictly "on top of" base,
+	// so base is the most sensible PR base.
+	return strings.TrimSpace(mb) == strings.TrimSpace(baseSHA)
 }
 
 func resolveBasesWithDeps(ctx context.Context, env Env, opts Options, currentBranch string, errOut io.Writer, deps baseResolutionDeps) (resolvedBases, error) {
@@ -50,6 +87,22 @@ func resolveBasesWithDeps(ctx context.Context, env Env, opts Options, currentBra
 			diffGitBase:   deps.preferOriginRef(ctx, base),
 			prBase:        base,
 		}, nil
+	}
+
+	// Prefer `main` if it is a perfect ancestor base (merge-base(main, HEAD) == main tip).
+	// This handles repos where stacked-base heuristics might pick another long-lived branch
+	// (e.g. preview) even though the branch was cut from main.
+	if isPerfectAncestorBase(ctx, deps.preferOriginRef(ctx, "main"), deps) || isPerfectAncestorBase(ctx, "main", deps) {
+		// Best-effort safety check: only abort main-preference if GitHub clearly says `main` doesn't exist.
+		if exists, err := deps.githubBranchExists(ctx, env, "main"); err == nil && !exists {
+			// Fall through to normal resolution.
+		} else {
+			return resolvedBases{
+				diffBaseLabel: "main",
+				diffGitBase:   deps.preferOriginRef(ctx, "main"),
+				prBase:        "main",
+			}, nil
+		}
 	}
 
 	defaultBase := ""

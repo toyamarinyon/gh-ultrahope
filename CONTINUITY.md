@@ -1,5 +1,7 @@
 - Goal (incl. success criteria):
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
+  - Fix `gh ultrahope pr create` base branch auto-resolution so it prefers the repository default branch (e.g. `main`) and does not incorrectly select `preview` when `main` exists and should be the PR base.
+  - Add `--draft` option to `gh ultrahope pr create` so users can create draft PRs via CLI (CLI should override config).
   - Add `mise` task(s) so local development install is one command: `mise run install` (build + uninstall + install).
   - Align `README.md` documentation with current implementation, especially the "Environment variables" section: provider/model/endpoint are configured via YAML config; only API key is required via env.
   - Enhance `gh ultrahope pr suggest` base selection to support stacked-branch workflows by auto-detecting a better base from `refs/remotes/origin/*` when base is omitted (fallback to repo default branch detection).
@@ -32,6 +34,11 @@
   - Config loading: stop reading `$XDG_CONFIG_HOME/gh-dash/config.yml` / `$HOME/.config/gh-dash/config.yml`; use `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` instead. No fallback to `gh-dash`.
 
 - State:
+  - Updated `README.md` to document `gh ultrahope pr create --draft`.
+  - Added unit tests for draft precedence in `internal/prcreate/draft_test.go`.
+  - Added `internal/prcreate/draft.go` to centralize draft precedence (CLI overrides config).
+  - Updated `internal/prcreate/pr_create.go` to resolve draft from CLI (`--draft`) with config fallback.
+  - Added `--draft` flag to `cmd/pr_create.go` (Cobra) and wired it into `internal/prcreate`.
   - Repo: `/Users/satoshi/repo/toyamarinyon/gh-pr-suggest` (git repo; will become ultrahope naming).
   - Current implementation: single `main.go` with manual parsing and rich logic (LLM/config/PR create).
   - Command target: `gh ultrahope pr create [base-branch]` implemented via Cobra.
@@ -44,6 +51,10 @@
   - Implemented base resolution split (diff base vs PR base), GitHub API branch existence check, and origin-pref git ref selection (tests pass).
   - Refactoring done: base resolution helpers extracted to `internal/prcreate/base_resolution.go` (with debug logs) and wired into `internal/prcreate/pr_create.go` (tests pass).
   - Added unit tests for base resolution helpers (`internal/prcreate/base_resolution_test.go`) (go test ./... passes).
+  - Updated base resolution to prefer `main` when `merge-base(main, HEAD)` equals `main` tip, so it won't incorrectly pick other branches like `preview` as PR base when the branch is cut from `main`.
+  - Added unit test to enforce main-preference even if stacked-base/default branch would select `preview`.
+  - Main-preference includes a best-effort GitHub existence check: only disables main-preference if GitHub explicitly reports `main` doesn't exist.
+  - `isPerfectAncestorBase` now guards against nil injected deps to avoid panics in tests.
   - Global config path updated to `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback `$HOME/.config/ultrahope/config.yml`) in `internal/prcreate/config.go`.
   - `internal/prcreate.LoadFileConfig(ctx)` added for `gh ultrahope config` to display merged file config and loaded file paths (env vars not applied).
   - README config docs updated to describe `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` (no `gh-dash` path).
@@ -68,6 +79,7 @@
   - Release workflow: unchanged (no `go_binary_name`).
 
 - Done:
+  - Ran gofmt on touched Go files; `go test ./...` passes.
   - Existing `gh-pr-suggest` implementation is functional; refactor to `ultrahope` is the active task.
   - Ran `gofmt` over `main.go`, `cmd/*.go`, `internal/prcreate/*.go`.
   - Switched LLM env var names in `internal/prcreate/pr_create.go` to `ULTRAHOPE_*` only (no legacy fallback).
@@ -80,10 +92,12 @@
   - Updated `README.md` to mention `mise run install` in local development install steps.
 
 - Now:
-  - Base resolution fix implemented; ready for user verification by running `gh ultrahope pr create`.
+  - `gh ultrahope pr create --draft` implemented (CLI overrides config `create.draft`).
+  - Investigate why base branch resolves to `preview` in some repos and adjust base auto-resolution to prefer repo default branch (`main`) when appropriate.
 
 - Next:
-  - (Optional) Add README note explaining PR base vs diff base and the fallback message.
+  - (Optional) Verify `gh ultrahope pr create --draft` behavior in a real repo.
+  - Add/adjust unit tests to cover `preview` vs `main` base selection and prevent regressions.
 
 - Open questions (UNCONFIRMED if needed):
   - None.

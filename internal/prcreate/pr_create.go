@@ -48,6 +48,8 @@ type Options struct {
 	BaseGiven  bool
 	Edit       bool
 	DryRun     bool
+	Draft      bool
+	DraftGiven bool
 	Debug      bool
 }
 
@@ -186,7 +188,10 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 	}
 
 	skipConfirm := loadedCfg.Config.Create.SkipConfirm != nil && *loadedCfg.Config.Create.SkipConfirm
-	draft := loadedCfg.Config.Create.Draft != nil && *loadedCfg.Config.Create.Draft
+	draft := resolveDraft(opts, loadedCfg.Config)
+	if opts.Debug && opts.DraftGiven {
+		fmt.Fprintf(errOut, "[debug] --draft explicitly set to %t (overrides config)\n", opts.Draft)
+	}
 
 	title, body := parseSuggestedOutput(outputText)
 	if strings.TrimSpace(title) == "" {

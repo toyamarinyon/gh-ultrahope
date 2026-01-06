@@ -22,6 +22,7 @@ func createArgs(cmd *cobra.Command, args []string) error {
 func init() {
 	var edit bool
 	var dryRun bool
+	var draft bool
 	var debug bool
 
 	createCmd := &cobra.Command{
@@ -40,12 +41,15 @@ If detection fails, pass a base branch explicitly (e.g. "main") or set GH_REPO.`
 				base = args[0]
 				baseGiven = true
 			}
+			draftGiven := cmd.Flags().Changed("draft")
 
 			code := prcreate.Run(prcreate.Options{
 				BaseBranch: base,
 				BaseGiven:  baseGiven,
 				Edit:       edit,
 				DryRun:     dryRun,
+				Draft:      draft,
+				DraftGiven: draftGiven,
 				Debug:      debug,
 			}, os.Stdin, os.Stdout, os.Stderr)
 
@@ -58,6 +62,7 @@ If detection fails, pass a base branch explicitly (e.g. "main") or set GH_REPO.`
 
 	createCmd.Flags().BoolVarP(&edit, "edit", "e", false, "Edit the generated output in $EDITOR")
 	createCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Print generated title/body only (do not create PR)")
+	createCmd.Flags().BoolVar(&draft, "draft", false, "Mark pull request as a draft")
 	createCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Print extra debug info (never prints secrets)")
 
 	prCmd.AddCommand(createCmd)
