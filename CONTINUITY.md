@@ -93,16 +93,28 @@
   - Updated repo-level config candidate filenames in `internal/prcreate/config.go` from `gh-pr-suggest` to `ultrahope`.
   - Added `mise.toml` tasks for local dev extension reinstall (`mise run install`: build + `gh extension remove ultrahope` + `gh extension install .`).
   - Updated `README.md` to mention `mise run install` in local development install steps.
+  - Add `gh ultrahope pr reply` command: prompt for PR comment URL, fetch PR title/body/diff + comment body, draft a concise reply via LLM in the same language, then (after y/N confirmation) post the reply to GitHub.
 
 - Now:
   - `gh ultrahope pr create --draft` implemented (CLI overrides config `create.draft`).
   - Investigate why base branch resolves to `preview` in some repos and adjust base auto-resolution to prefer repo default branch (`main`) when appropriate.
   - `gh ultrahope pr update` implemented (create-if-missing + publish-if-draft).
+  - Implement `gh ultrahope pr reply` (URL prompt → fetch PR+comment context → multiline draft → LLM → confirm → post).
+  - Added Cobra scaffold for `ultrahope pr reply` in `cmd/pr_reply.go` (wires to `prcreate.RunReply`).
+  - Implemented `prcreate.RunReply` core flow in `internal/prcreate/pr_reply.go` (URL parse, fetch PR+diff+comment, multiline draft, LLM, confirm, post).
+  - Tweaked `pr_reply.go` input handling (blank-line terminator; removed stray no-op; made diff prompt cap a const).
+  - Added URL parsing tests for `pr reply` in `internal/prcreate/reply_url_test.go`.
+  - Ran `gofmt` on `cmd/pr_reply.go`, `internal/prcreate/pr_reply.go`, `internal/prcreate/reply_url_test.go`.
+  - Fixed `pr reply` URL parsing regex to correctly detect numeric PR path segments.
+  - Ran `gofmt` on `internal/prcreate/pr_reply.go` after the fix.
+  - Adjusted `pr reply` to infer a target reply language from PR/title/body + comment body (ignores user draft), explicitly translate drafts to that language, and retry with a translation-only prompt if the first LLM output is in the wrong language.
+  - Added `e` option to `pr reply` post confirmation prompt (`[y/N/e]`) to open `$EDITOR` and edit the generated reply before posting.
 
 - Next:
   - (Optional) Verify `gh ultrahope pr create --draft` behavior in a real repo.
   - Add/adjust unit tests to cover `preview` vs `main` base selection and prevent regressions.
   - (Optional) Verify `gh ultrahope pr update` behavior in a real repo.
+  - Add/adjust unit tests for `pr reply` URL parsing (discussion_r / issuecomment) to prevent regressions.
 
 - Open questions (UNCONFIRMED if needed):
   - None.
@@ -112,7 +124,10 @@
   - `cmd/root.go`, `cmd/pr.go`
   - `cmd/pr_create.go`
   - `cmd/pr_update.go`
+  - `cmd/pr_reply.go`
   - `internal/prcreate/*`
+  - `internal/prcreate/pr_reply.go`
+  - `internal/prcreate/reply_url_test.go`
   - `internal/prcreate/pr_create.go`
   - `internal/prcreate/pr_update.go`
   - `internal/prcreate/base_resolution.go`
