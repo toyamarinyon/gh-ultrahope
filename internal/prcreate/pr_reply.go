@@ -112,6 +112,13 @@ func RunReply(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 	}
 
 	fmt.Fprintln(out, "Fetched PR title, body, diff, and comment body.")
+	fmt.Fprintln(out, "")
+	fmt.Fprintf(out, "PR: %s/%s#%d\n", target.Owner, target.Repo, target.PRNumber)
+	fmt.Fprintln(out, "Title:")
+	fmt.Fprintln(out, nonEmptyOr(strings.TrimSpace(prTitle), "(empty)"))
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "Comment to reply:")
+	fmt.Fprintln(out, nonEmptyOr(strings.TrimSpace(commentBody), "(empty)"))
 
 	fmt.Fprintln(errOut, "")
 	fmt.Fprintln(errOut, "Enter reply draft (end with an empty line):")

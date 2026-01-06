@@ -109,6 +109,7 @@
   - Ran `gofmt` on `internal/prcreate/pr_reply.go` after the fix.
   - Adjusted `pr reply` to infer a target reply language from PR/title/body + comment body (ignores user draft), explicitly translate drafts to that language, and retry with a translation-only prompt if the first LLM output is in the wrong language.
   - Added `e` option to `pr reply` post confirmation prompt (`[y/N/e]`) to open `$EDITOR` and edit the generated reply before posting.
+  - Updated `gh ultrahope pr reply`: after URL fetch completes, print PR title and the target comment body before prompting for a draft reply.
 
 - Next:
   - (Optional) Verify `gh ultrahope pr create --draft` behavior in a real repo.
