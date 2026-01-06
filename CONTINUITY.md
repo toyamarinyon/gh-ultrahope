@@ -8,6 +8,8 @@
   - Add `gh ultrahope config` subcommand that prints loaded config file path(s) and the effective merged file config to stdout.
   - Align CLI naming with `gh pr`: rename `gh ultrahope pr suggest` to `gh ultrahope pr create` (no alias; breaking change). Ensure `gh ultrahope pr` shows help.
   - When running `gh ultrahope pr create`, print the resolved base branch above generated TITLE/BODY output (always, whether base is provided or auto-detected).
+  - If stacked-base auto-detection picks a base branch that no longer exists on GitHub, fall back PR base to the repo default branch (GitHub API), and print a visible fallback message.
+  - Split PR base vs diff base: PR base may fall back, while diff/log can keep the originally detected base as long as `git merge-base` succeeds (accepted that generated text may differ from PR diff).
   - Success criteria:
     - `go build` produces `gh-ultrahope`.
     - `gh ultrahope pr suggest` preserves existing behavior (flags, env vars, config loading, debug/secret-safe logging, LLM providers, PR creation flow) while improving base auto-detection for stacked branches.
@@ -39,6 +41,9 @@
   - Moved config loader/schema into `internal/prcreate/config.go` (preserves current file locations/precedence).
   - Env vars use `ULTRAHOPE_*` only.
   - Base branch auto-detect enhancement in progress: when base omitted, will prefer stacked base from `refs/remotes/origin/*` (as git ref `origin/<branch>`) and use `<branch>` for PR base; fallback remains repo default branch detection.
+  - Implemented base resolution split (diff base vs PR base), GitHub API branch existence check, and origin-pref git ref selection (tests pass).
+  - Refactoring done: base resolution helpers extracted to `internal/prcreate/base_resolution.go` (with debug logs) and wired into `internal/prcreate/pr_create.go` (tests pass).
+  - Added unit tests for base resolution helpers (`internal/prcreate/base_resolution_test.go`) (go test ./... passes).
   - Global config path updated to `$XDG_CONFIG_HOME/ultrahope/config.yml` (fallback `$HOME/.config/ultrahope/config.yml`) in `internal/prcreate/config.go`.
   - `internal/prcreate.LoadFileConfig(ctx)` added for `gh ultrahope config` to display merged file config and loaded file paths (env vars not applied).
   - README config docs updated to describe `$XDG_CONFIG_HOME/ultrahope/config.yml` / `$HOME/.config/ultrahope/config.yml` (no `gh-dash` path).
@@ -75,16 +80,10 @@
   - Updated `README.md` to mention `mise run install` in local development install steps.
 
 - Now:
-  - Renaming CLI surface from `pr suggest` to `pr create` (no alias).
-  - Renaming internal package and filenames from `prsuggest` to `prcreate` to avoid confusion (dir + files).
-  - Polishing remaining `suggest` wording in code/help output.
-  - Add `Base branch: <branch>` line above generated output for `pr create`.
+  - Base resolution fix implemented; ready for user verification by running `gh ultrahope pr create`.
 
 - Next:
-  - Update Cobra command wiring to expose `pr create` and remove `pr suggest`. (done)
-  - Update user-facing strings + README references from `pr suggest` to `pr create`. (done)
-  - Run `go test ./...` to confirm behavior. (done)
-  - Polish remaining `suggest` wording in help/output. (done)
+  - (Optional) Add README note explaining PR base vs diff base and the fallback message.
 
 - Open questions (UNCONFIRMED if needed):
   - None.
@@ -94,5 +93,8 @@
   - `cmd/root.go`, `cmd/pr.go`
   - `cmd/pr_create.go`
   - `internal/prcreate/*`
+  - `internal/prcreate/pr_create.go`
+  - `internal/prcreate/base_resolution.go`
+  - `internal/prcreate/base_resolution_test.go`
   - `mise.toml`
   - `README.md`

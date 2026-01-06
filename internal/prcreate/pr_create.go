@@ -117,48 +117,21 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return ExitRuntimeErr
 	}
 
-	var base baseSelection
-	if opts.BaseGiven {
-		base = baseSelection{prBase: opts.BaseBranch, gitBase: opts.BaseBranch}
-	} else {
-		if detected, ok, err := detectStackedBaseBranch(ctx, currentBranch); err != nil {
-			if opts.Debug {
-				fmt.Fprintf(errOut, "[debug] stacked base detection failed: %s\n", err.Error())
-			}
-		} else if ok {
-			base = detected
-			if opts.Debug {
-				fmt.Fprintf(errOut, "[debug] detected stacked base prBase=%s gitBase=%s\n", base.prBase, base.gitBase)
-			}
-		}
-
-		if strings.TrimSpace(base.prBase) == "" || strings.TrimSpace(base.gitBase) == "" {
-			// Fall back to repository default branch detection.
-			detected, err := detectDefaultBaseBranch(ctx, env)
-			if err != nil || strings.TrimSpace(detected) == "" {
-				if opts.Debug && err != nil {
-					fmt.Fprintf(errOut, "[debug] failed to detect default base branch: %s\n", err.Error())
-				}
-				fmt.Fprintln(errOut, "Error: Unable to determine the repository default base branch.")
-				fmt.Fprintln(errOut, "Hint: Set GH_REPO=OWNER/REPO, or pass a base branch explicitly:")
-				fmt.Fprintln(errOut, "  gh ultrahope pr create main")
-				return ExitRuntimeErr
-			}
-			base = baseSelection{prBase: strings.TrimSpace(detected), gitBase: strings.TrimSpace(detected)}
-			if opts.Debug {
-				fmt.Fprintf(errOut, "[debug] detected default base branch=%s\n", base.prBase)
-			}
-		}
+	bases, err := resolveBases(ctx, env, opts, currentBranch, errOut)
+	if err != nil {
+		// Error already includes user-facing hints when appropriate.
+		fmt.Fprintln(errOut, err.Error())
+		return ExitRuntimeErr
 	}
 
-	// Validate merge base exists.
-	if err := validateMergeBase(ctx, base.gitBase); err != nil {
-		fmt.Fprintf(errOut, "Error: Cannot find merge base between '%s' and HEAD.\n", base.gitBase)
+	// Validate merge base exists for the diff base.
+	if err := validateMergeBase(ctx, bases.diffGitBase); err != nil {
+		fmt.Fprintf(errOut, "Error: Cannot find merge base between '%s' and HEAD.\n", bases.diffGitBase)
 		fmt.Fprintln(errOut, "Make sure the base branch/commit exists.")
 		return ExitRuntimeErr
 	}
 
-	commitLog, err := getCommitLog(ctx, base.gitBase, "HEAD")
+	commitLog, err := getCommitLog(ctx, bases.diffGitBase, "HEAD")
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
@@ -169,23 +142,23 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return ExitRuntimeErr
 	}
 
-	diffSummary, err := getDiffSummary(ctx, base.gitBase)
+	diffSummary, err := getDiffSummary(ctx, bases.diffGitBase)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
-	detailedDiff, err := getDetailedDiff(ctx, base.gitBase)
+	detailedDiff, err := getDetailedDiff(ctx, bases.diffGitBase)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
-	changedFiles, err := getChangedFiles(ctx, base.gitBase)
+	changedFiles, err := getChangedFiles(ctx, bases.diffGitBase)
 	if err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
 
-	prompt := buildPrompt(commitLog, diffSummary, detailedDiff, changedFiles, currentBranch, base.prBase)
+	prompt := buildPrompt(commitLog, diffSummary, detailedDiff, changedFiles, currentBranch, bases.diffBaseLabel)
 
 	suggested, err := callLLM(ctx, env, prompt, opts.Debug, &sp, errOut)
 	if err != nil {
@@ -193,7 +166,7 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		return ExitRuntimeErr
 	}
 
-	outputText := fmt.Sprintf("Base branch: %s\n\n%s", strings.TrimSpace(base.prBase), suggested)
+	outputText := fmt.Sprintf("Base branch: %s\n\n%s", strings.TrimSpace(bases.diffBaseLabel), suggested)
 	if opts.Edit {
 		edited, err := editInEditor(outputText, env.Editor)
 		if err != nil {
@@ -204,6 +177,9 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 	}
 
 	fmt.Fprintln(out, outputText)
+	if strings.TrimSpace(bases.prBaseFallbackMsg) != "" {
+		fmt.Fprintln(errOut, bases.prBaseFallbackMsg)
+	}
 
 	if opts.DryRun {
 		return ExitOK
@@ -226,7 +202,7 @@ func Run(opts Options, in io.Reader, out io.Writer, errOut io.Writer) int {
 		fmt.Fprintln(errOut, "[debug] create.skip_confirm=true; skipping confirmation prompt")
 	}
 
-	if err := createPullRequest(ctx, env, title, body, currentBranch, base.prBase, draft, opts.Debug, &sp, out, errOut); err != nil {
+	if err := createPullRequest(ctx, env, title, body, currentBranch, bases.prBase, draft, opts.Debug, &sp, out, errOut); err != nil {
 		fmt.Fprintln(errOut, err.Error())
 		return ExitRuntimeErr
 	}
