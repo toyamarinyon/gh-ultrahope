@@ -1,5 +1,6 @@
 - Goal (incl. success criteria):
   - Maintain this Continuity Ledger per `AGENTS.md` (update at start of each assistant turn and immediately after each file edit).
+  - Add `gh ultrahope pr update` command: similar to `pr create`, but if no PR exists for the current branch it should propose creating one; if the PR is draft, prompt `Publish? [y/N]` and publish when yes.
   - Fix `gh ultrahope pr create` base branch auto-resolution so it prefers the repository default branch (e.g. `main`) and does not incorrectly select `preview` when `main` exists and should be the PR base.
   - Add `--draft` option to `gh ultrahope pr create` so users can create draft PRs via CLI (CLI should override config).
   - Add `mise` task(s) so local development install is one command: `mise run install` (build + uninstall + install).
@@ -49,6 +50,7 @@
   - Env vars use `ULTRAHOPE_*` only.
   - Base branch auto-detect enhancement in progress: when base omitted, will prefer stacked base from `refs/remotes/origin/*` (as git ref `origin/<branch>`) and use `<branch>` for PR base; fallback remains repo default branch detection.
   - Implemented base resolution split (diff base vs PR base), GitHub API branch existence check, and origin-pref git ref selection (tests pass).
+  - Added Cobra `pr update` command scaffold (`cmd/pr_update.go`) and started implementing update logic (`internal/prcreate/pr_update.go`).
   - Refactoring done: base resolution helpers extracted to `internal/prcreate/base_resolution.go` (with debug logs) and wired into `internal/prcreate/pr_create.go` (tests pass).
   - Added unit tests for base resolution helpers (`internal/prcreate/base_resolution_test.go`) (go test ./... passes).
   - Updated base resolution to prefer `main` when `merge-base(main, HEAD)` equals `main` tip, so it won't incorrectly pick other branches like `preview` as PR base when the branch is cut from `main`.
@@ -86,6 +88,7 @@
   - Updated `README.md` "Environment variables" + "Examples" to match implementation: provider/model/endpoint are configured via YAML config; API key required via `ULTRAHOPE_LLM_API_KEY` env; removed `ULTRAHOPE_LLM_PROVIDER/ENDPOINT/MODEL` from README.
   - Updated `README.md` "Base branch default behavior" section to document stacked-branch detection (preferred) and repository default fallback.
   - Implemented default PR creation for `gh ultrahope pr create` and added `--dry-run` (print-only); updated README; `gofmt` and `go test ./...` pass.
+  - Added `gh ultrahope pr update` command: generates title/body like create, updates existing PR for current branch; if no PR exists, proposes creating one; if PR is draft, offers publishing (`gh pr ready`) with y/N.
   - Updated `README.md` to document `ULTRAHOPE_*` env vars (and `ULTRAHOPE_CONFIG`).
   - Updated repo-level config candidate filenames in `internal/prcreate/config.go` from `gh-pr-suggest` to `ultrahope`.
   - Added `mise.toml` tasks for local dev extension reinstall (`mise run install`: build + `gh extension remove ultrahope` + `gh extension install .`).
@@ -94,10 +97,12 @@
 - Now:
   - `gh ultrahope pr create --draft` implemented (CLI overrides config `create.draft`).
   - Investigate why base branch resolves to `preview` in some repos and adjust base auto-resolution to prefer repo default branch (`main`) when appropriate.
+  - `gh ultrahope pr update` implemented (create-if-missing + publish-if-draft).
 
 - Next:
   - (Optional) Verify `gh ultrahope pr create --draft` behavior in a real repo.
   - Add/adjust unit tests to cover `preview` vs `main` base selection and prevent regressions.
+  - (Optional) Verify `gh ultrahope pr update` behavior in a real repo.
 
 - Open questions (UNCONFIRMED if needed):
   - None.
@@ -106,8 +111,10 @@
   - `main.go`, `cmd/config.go`
   - `cmd/root.go`, `cmd/pr.go`
   - `cmd/pr_create.go`
+  - `cmd/pr_update.go`
   - `internal/prcreate/*`
   - `internal/prcreate/pr_create.go`
+  - `internal/prcreate/pr_update.go`
   - `internal/prcreate/base_resolution.go`
   - `internal/prcreate/base_resolution_test.go`
   - `mise.toml`
