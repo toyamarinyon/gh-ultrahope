@@ -2,7 +2,11 @@
 
 AI-powered GitHub workflow assistant.
 
-This repository currently ships the `ultrahope pr create` command, which creates a pull request with an AI-generated title and body from git commits and diffs using an LLM API.
+This repository ships GitHub PR helpers:
+
+- `ultrahope pr create`: create a pull request with an AI-generated title and body
+- `ultrahope pr update`: update the pull request for the current branch (or propose creating one)
+- `ultrahope pr reply`: draft and post a reply to a PR comment/review comment from a pasted URL
 
 This repository is a **GitHub CLI extension**. The executable is `gh-ultrahope` and it is invoked as:
 
@@ -36,6 +40,9 @@ gh ultrahope pr create [base-branch]
 gh ultrahope pr create main --edit
 gh ultrahope pr create main --dry-run
 gh ultrahope pr create main --draft
+gh ultrahope pr update [base-branch]
+gh ultrahope pr update main --dry-run
+gh ultrahope pr reply
 gh ultrahope config
 ```
 
@@ -45,10 +52,35 @@ Use `--dry-run` to only print the suggestion (no confirmation prompt, no PR crea
 ### Options
 
 - `--edit`, `-e`: edit the generated output in `$EDITOR` before printing
-- `--dry-run`, `-n`: print suggested title/body only (do not create PR)
+- `--dry-run`, `-n`: print suggested title/body only (do not create/update PR)
 - `--draft`: mark pull request as a draft (overrides config `create.draft`; use `--draft=false` to force non-draft)
 - `--debug`, `-d`: print extra debug info (never prints secrets)
 - `--help`, `-h`: show help
+
+### `pr update` behavior
+
+`gh ultrahope pr update` generates a new title/body (like `pr create`), then:
+
+- If an **open pull request exists for the current branch**, it asks for confirmation and updates the PR title/body.
+- If **no pull request exists**, it proposes creating a new PR (`Create one now? [y/N]`).
+- If the existing PR is a **draft**, it offers publishing it (`Publish it now? [y/N]`).
+
+Note: `--draft` is only used when `pr update` ends up creating a new PR.
+
+### `pr reply` behavior
+
+`gh ultrahope pr reply` is an interactive command:
+
+- Paste a GitHub comment URL (see supported URL formats below)
+- Ultrahope fetches PR title/body/diff and the comment body
+- Enter a draft reply (end with an empty line)
+- It generates a concise reply in the same language as the PR/comment, then asks:
+  - `Post this reply now? [y/N/e]` (`e` opens `$EDITOR` to edit before posting)
+
+Supported URL formats:
+
+- Review comments: `.../pull/<number>#discussion_r<id>` (or `#r<id>`)
+- Issue comments on PR: `.../pull/<number>#issuecomment-<id>`
 
 ### Base branch default behavior
 
@@ -114,6 +146,21 @@ If no config file is found and `stdin` is a TTY, `gh ultrahope pr create` will s
 ```bash
 export ULTRAHOPE_LLM_API_KEY="..."
 gh ultrahope pr create
+```
+
+#### Update PR for current branch
+
+```bash
+export ULTRAHOPE_LLM_API_KEY="..."
+gh ultrahope pr update
+```
+
+#### Reply to a PR comment
+
+```bash
+export ULTRAHOPE_LLM_API_KEY="..."
+gh ultrahope pr reply
+# paste comment URL when prompted
 ```
 
 #### Claude (Anthropic Messages API)
